@@ -1,0 +1,42 @@
+<Window
+    x:Class="WinUIDemo.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:local="using:WinUIDemo"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:views="using:WinUIDemo.Views"
+    mc:Ignorable="d">
+
+    <Grid
+        x:Name="Root"
+        HorizontalAlignment="Stretch"
+        VerticalAlignment="Stretch"
+        Background="{ThemeResource BackgroundBrush}"
+        RowDefinitions="Auto,*">
+
+        <!--  Custom TitleBar  -->
+        <Grid
+            x:Name="CustomTitleBar"
+            Grid.Row="0"
+            Height="30"
+            Margin="0">
+            <StackPanel Orientation="Horizontal">
+                <Image
+                    Width="25"
+                    Height="25"
+                    Margin="4,1"
+                    Source="Assets/RepoFolderSmall.png" />
+                <TextBlock
+                    Margin="2,0"
+                    VerticalAlignment="Center"
+                    Style="{StaticResource CaptionTextBlockStyle}"
+                    Text="{x:Bind Title, Mode=OneWay}" />
+            </StackPanel>
+        </Grid>
+
+        <!--  Main Content Control  -->
+        <views:MainView Grid.Row="1" Margin="10" />
+
+    </Grid>
+</Window>

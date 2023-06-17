@@ -1,0 +1,43 @@
+<UserControl
+    x:Class="WinUIDemo.Controls.TabHeader"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:local="using:WinUIDemo.Controls"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    IsTabStop="False"
+    mc:Ignorable="d">
+    <StackPanel
+        x:Name="stackPanel"
+        Margin="1"
+        BorderBrush="Transparent"
+        BorderThickness="2"
+        CornerRadius="3">
+        <Grid>
+            <Image
+                x:Name="selectedImage"
+                Width="41"
+                Height="41"
+                Source="{Binding SelectedImage}"
+                Stretch="Uniform" />
+            <Image
+                x:Name="unselectedImage"
+                Width="40"
+                Height="40"
+                Source="{Binding UnselectedImage}"
+                Stretch="Uniform" />
+        </Grid>
+        <TextBlock
+            x:Name="label"
+            Margin="4,3,2,3"
+            HorizontalAlignment="Center"
+            FontFamily="Segoe UI"
+            IsTextScaleFactorEnabled="False"
+            LineHeight="14"
+            LineStackingStrategy="BlockLineHeight"
+            MaxLines="1"
+            Style="{StaticResource CaptionTextBlockStyle}"
+            Text="{Binding Label}"
+            TextAlignment="Center" />
+    </StackPanel>
+</UserControl>

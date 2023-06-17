@@ -1,0 +1,181 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net6.0-windows10.0.19041.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <RootNamespace>WinUIDemo</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <Platforms>x86;x64;ARM64</Platforms>
+    <RuntimeIdentifiers>win10-x86;win10-x64;win10-arm64</RuntimeIdentifiers>
+    <PublishProfile>win10-$(Platform).pubxml</PublishProfile>
+    <UseWinUI>true</UseWinUI>
+    <EnableMsixTooling>true</EnableMsixTooling>
+    <!-- 
+        WindowsPackageType defines whether your app is packaged (MSIX) or unpackaged (None) 
+    -->
+    <WindowsPackageType>None</WindowsPackageType>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <ApplicationIcon>Assets\RepoFolder.ico</ApplicationIcon>
+    
+    <!--
+        ** Extras (https://learn.microsoft.com/en-us/dotnet/core/project-sdk/msbuild-props) **
+    -->
+    
+    <!--
+        The RollForward property controls how the application chooses a runtime when multiple runtime versions 
+        are available. This value is output to the RepoBackup.runtimeconfig.json as the "rollForward" setting.
+    -->
+    <RollForward>LatestMinor</RollForward>
+    
+    <!-- 
+        CopyLocalLockFileAssemblies is useful for plugin projects that have dependencies on other libraries.
+        If you set this property to true, any NuGet package dependencies are copied to the output directory.
+    -->
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    
+    <!-- 
+        To speed up the build time, builds that are implicitly triggered by Visual Studio skip code analysis, 
+        including nullable analysis. Visual Studio triggers an implicit build when you run tests, for example. 
+        However, implicit builds are optimized only when TreatWarningsAsErrors is not true.
+    -->
+    <OptimizeImplicitlyTriggeredBuild>True</OptimizeImplicitlyTriggeredBuild>
+    
+    <!--
+      Generates an XML documentation file at compile time, e.g. "(outdir)\RepoBackup.xml"
+      This will also check the formatting of your summary blocks and put the notes inside the documentation file.
+    -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    
+    <!-- 
+      These next two get rid of all the unecessary pathing that MS adds and 
+      makes the output match the traditional .NET Framework builds.
+    -->
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
+    
+    <!-- 
+        Whether the SDK generates error NETSDK1148 when MSBuild detects duplicate 
+        files in the publish output, but can't determine which files to remove.
+    -->
+    <ErrorOnDuplicatePublishOutputFiles>false</ErrorOnDuplicatePublishOutputFiles>
+    
+    <!-- 
+    ** We'll set the props in the AssemblyInfo file, since we've stated that we want to generate an assembly info file. **
+    <Company>ICS</Company>
+    <Authors>Steve Chamlee</Authors>
+    <Product>RepoBackup</Product>
+    <Description>A source repository backup utility.</Description>
+    <Version>1.0.0.5</Version>
+    -->
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <GeneratedAssemblyInfoFile>Properties\AssemblyInfo.cs</GeneratedAssemblyInfoFile>
+    <AllowUnsafeBlocks>False</AllowUnsafeBlocks>
+    
+    <!--
+        The RunArguments property defines the arguments that are passed to the app when it is run.
+    <RunArguments>-mode backup</RunArguments>
+    -->
+  </PropertyGroup>
+
+    <!-- 
+	   Define "IS_UNPACKAGED" constant if the app is an unpackaged app. 
+    -->
+  <PropertyGroup Condition="'$(WindowsPackageType)' == 'None'">
+      <DefineConstants>IS_UNPACKAGED</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Remove="Assets\AppIcon.ico" />
+    <None Remove="Assets\AppIcon.png" />
+    <None Remove="Assets\Edit.png" />
+    <None Remove="Assets\RepoFolderVector.svg" />
+    <None Remove="Assets\SpinnerGear.png" />
+    <None Remove="Assets\SpinnerRing.png" />
+    <None Remove="Controls\CompositionShadow.xaml" />
+    <None Remove="Controls\TabHeader.xaml" />
+    <None Remove="Views\FileBackupView.xaml" />
+    <None Remove="Views\MainView.xaml" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="Assets\SplashScreen.scale-200.png" />
+    <Content Include="Assets\LockScreenLogo.scale-200.png" />
+    <Content Include="Assets\Square150x150Logo.scale-200.png" />
+    <Content Include="Assets\Square44x44Logo.scale-200.png" />
+    <Content Include="Assets\StoreLogo.png" />
+    <Content Include="Assets\Wide310x150Logo.scale-200.png" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.2.230313.1" />
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.22621.755" />
+    <Manifest Include="$(ApplicationManifest)" />
+  </ItemGroup>
+
+  <!-- 
+    Defining the "Msix" ProjectCapability here allows the Single-project MSIX Packaging
+    Tools extension to be activated for this project even if the Windows App SDK Nuget
+    package has not yet been restored.
+  -->
+  <ItemGroup Condition="'$(DisableMsixProjectCapabilityAddedByProject)'!='true' and '$(EnableMsixTooling)'=='true'">
+    <ProjectCapability Include="Msix" />
+  </ItemGroup>
+  <ItemGroup>
+    <Page Update="Controls\TabHeader.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+  </ItemGroup>
+  <ItemGroup>
+    <Page Update="Controls\CompositionShadow.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+  </ItemGroup>
+  <ItemGroup>
+    <Page Update="Views\FileBackupView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+  </ItemGroup>
+  <ItemGroup>
+    <Page Update="Views\MainView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+  </ItemGroup>
+
+  <!-- 
+    Defining the "HasPackageAndPublishMenuAddedByProject" property here allows the Solution 
+    Explorer "Package and Publish" context menu entry to be enabled for this project even if 
+    the Windows App SDK Nuget package has not yet been restored.
+  -->
+  <PropertyGroup Condition="'$(DisableHasPackageAndPublishMenuAddedByProject)'!='true' and '$(EnableMsixTooling)'=='true'">
+    <HasPackageAndPublishMenu>true</HasPackageAndPublishMenu>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x86'">
+    <NoWarn>1701;1702;1591;0419</NoWarn>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <NoWarn>1701;1702;1591;0419</NoWarn>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|ARM64'">
+    <NoWarn>1701;1702;1591;0419</NoWarn>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x86'">
+    <NoWarn>1701;1702;1591;0419</NoWarn>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <NoWarn>1701;1702;1591;0419</NoWarn>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|ARM64'">
+    <NoWarn>1701;1702;1591;0419</NoWarn>
+  </PropertyGroup>
+
+  <!-- 
+      This target will remove the language folders inside the build output except the specified one. 
+  -->
+  <Target Name="RemoveFoldersWithMuiFiles" AfterTargets="Build">
+      <ItemGroup>
+          <RemovingFiles Include="$(OutDir)*\*.mui" Exclude="$(OutDir)en-us\*.mui" />
+          <RemovingFolders Include="@(RemovingFiles->'%(RootDir)%(Directory)')" />
+      </ItemGroup>
+      <RemoveDir Directories="@(RemovingFolders)" />
+  </Target>
+    
+</Project>

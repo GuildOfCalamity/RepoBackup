@@ -1,0 +1,896 @@
+<UserControl
+    x:Class="WinUIDemo.Views.FileBackupView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:ctrl="using:WinUIDemo.Controls"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:local="using:WinUIDemo.Views"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:model="using:WinUIDemo.Models"
+    xmlns:sys="using:System"
+    mc:Ignorable="d">
+
+    <!--
+    <UserControl.Resources>
+        <ResourceDictionary Source="ms-appx:///Microsoft.UI.Xaml/DensityStyles/Compact.xaml" />
+    </UserControl.Resources>
+    -->
+
+    <!--  Margin Key: left, top, right, bottom  -->
+
+    <Grid>
+        <Grid.ChildrenTransitions>
+            <TransitionCollection>
+                <AddDeleteThemeTransition />
+            </TransitionCollection>
+        </Grid.ChildrenTransitions>
+
+        <!--  Define SplitView Container  -->
+        <SplitView
+            x:Name="SettingsSplitView"
+            Margin="0,0,-15,0"
+            CompactPaneLength="96"
+            DisplayMode="Overlay"
+            IsPaneOpen="False"
+            OpenPaneLength="370"
+            PanePlacement="Right">
+
+            <!--  Settings  -->
+            <SplitView.Pane>
+                <ScrollViewer VerticalScrollMode="Auto">
+                    <!--
+                        The "header" StackPanel is aligned to the top of the panel, and the "footer"
+                        StackPanel is aligned to the bottom of the panel. The RelativePanel.AlignLeftWithPanel
+                        and RelativePanel.AlignRightWithPanel properties can be used to make the additional
+                        controls fill the horizontal space of the panel.
+                    -->
+                    <RelativePanel
+                        BorderBrush="Transparent"
+                        BorderThickness="2"
+                        CornerRadius="4">
+
+                        <Rectangle
+                            x:Name="AcrylicRectangle"
+                            Margin="-5,-3,-5,-3"
+                            Fill="{ThemeResource CustomAcrylicBrush}"
+                            Opacity="0.6"
+                            RelativePanel.AlignRightWithPanel="True"
+                            Stretch="UniformToFill" />
+
+                        <!--  Header  -->
+                        <StackPanel
+                            x:Name="spHeader"
+                            Margin="20,20,20,20"
+                            HorizontalAlignment="Stretch"
+                            VerticalAlignment="Stretch"
+                            BorderBrush="{ThemeResource BorderBrush}"
+                            BorderThickness="2"
+                            CornerRadius="4"
+                            Orientation="Vertical"
+                            RelativePanel.AlignLeftWithPanel="True"
+                            RelativePanel.AlignRightWithPanel="True"
+                            RelativePanel.AlignTopWithPanel="True">
+                            <StackPanel.ChildrenTransitions>
+                                <TransitionCollection>
+                                    <AddDeleteThemeTransition />
+                                </TransitionCollection>
+                            </StackPanel.ChildrenTransitions>
+                            <Grid Margin="0" RowDefinitions="Auto,Auto,*">
+                                <!--  Header Area  -->
+                                <Grid
+                                    Grid.Row="0"
+                                    Margin="-2,-2,-2,-5"
+                                    Background="{ThemeResource BackgroundBrush}"
+                                    ColumnDefinitions="*,*">
+                                    <TextBlock
+                                        Grid.Column="0"
+                                        Margin="12"
+                                        HorizontalAlignment="Left"
+                                        FontSize="24"
+                                        Foreground="{ThemeResource PrimaryBrush}"
+                                        Text="Settings" />
+                                    <SymbolIcon
+                                        Grid.Column="1"
+                                        Margin="12"
+                                        HorizontalAlignment="Right"
+                                        Foreground="{ThemeResource PrimaryBrush}"
+                                        Symbol="Setting" />
+                                </Grid>
+                                <!--  Separator  -->
+                                <Rectangle
+                                    Grid.Row="1"
+                                    Height="4"
+                                    Margin="-15,5,-15,5"
+                                    Stroke="{ThemeResource BorderBrush}"
+                                    StrokeThickness="1" />
+                                <!--  Settings Area  -->
+                                <StackPanel
+                                    Grid.Row="2"
+                                    Margin="10"
+                                    Orientation="Vertical"
+                                    Spacing="6">
+                                    <CheckBox
+                                        x:Name="cbWorkLocation"
+                                        Checked="cbWorkLocationChecked"
+                                        Content="At work"
+                                        IsChecked="True"
+                                        IsEnabled="{x:Bind IsBusy, Mode=OneWay, Converter={StaticResource BooleanInverter}}"
+                                        ToolTipService.ToolTip="Preconfigures the temporary file storage during the archive process"
+                                        Unchecked="cbWorkLocationChecked" />
+                                    <CheckBox
+                                        x:Name="cbOpenExplorer"
+                                        Checked="cbOpenExplorerChecked"
+                                        Content="Open explorer when finished"
+                                        IsChecked="True"
+                                        IsEnabled="{x:Bind IsBusy, Mode=OneWay, Converter={StaticResource BooleanInverter}}"
+                                        ToolTipService.ToolTip="Launches the Windows Explorer application"
+                                        Unchecked="cbOpenExplorerChecked" />
+                                    <CheckBox
+                                        x:Name="cbBackupInitial"
+                                        Checked="cbBackupInitialChecked"
+                                        Content="Full backup if no index found"
+                                        IsChecked="False"
+                                        IsEnabled="{x:Bind IsBusy, Mode=OneWay, Converter={StaticResource BooleanInverter}}"
+                                        ToolTipService.ToolTip="You'll need patience for this"
+                                        Unchecked="cbBackupInitialChecked" />
+                                    <ComboBox
+                                        x:Name="ThreadComboBox"
+                                        Margin="2,5"
+                                        IsEnabled="{x:Bind IsBusy, Mode=OneWay, Converter={StaticResource BooleanInverter}}"
+                                        ItemsSource="{x:Bind ThreadCount, Mode=OneWay}"
+                                        SelectedIndex="0"
+                                        SelectionChanged="OnThreadSelectionChanged"
+                                        ToolTipService.ToolTip="Select max thread count">
+                                        <ComboBox.ItemTemplate>
+                                            <DataTemplate>
+                                                <StackPanel Orientation="Horizontal" Spacing="3">
+                                                    <TextBlock Text="Use up to" />
+                                                    <TextBlock Text="{Binding}" />
+                                                    <TextBlock Text="threads" />
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ComboBox.ItemTemplate>
+                                    </ComboBox>
+                                    <ComboBox
+                                        x:Name="SpoiledComboBox"
+                                        Margin="2,5"
+                                        IsEnabled="{x:Bind IsBusy, Mode=OneWay, Converter={StaticResource BooleanInverter}}"
+                                        ItemsSource="{x:Bind StaleCount, Mode=OneWay}"
+                                        SelectedIndex="3"
+                                        SelectionChanged="OnSpoiledSelectionChanged"
+                                        ToolTipService.ToolTip="Select freshness amount">
+                                        <ComboBox.ItemTemplate>
+                                            <DataTemplate>
+                                                <StackPanel Orientation="Horizontal" Spacing="3">
+                                                    <TextBlock Text="Consider stale after" />
+                                                    <TextBlock Text="{Binding Mode=OneWay, Converter={StaticResource DaysToTime}}" />
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ComboBox.ItemTemplate>
+                                    </ComboBox>
+                                    <Button
+                                        x:Name="btnEditIndex"
+                                        MinHeight="34"
+                                        Margin="2,5"
+                                        Padding="6,3,6,3"
+                                        Click="btnEditIndexDatabaseOnClick"
+                                        IsEnabled="{x:Bind IsBusy, Mode=OneWay, Converter={StaticResource BooleanInverter}}"
+                                        Style="{StaticResource MyButtonStyle}"
+                                        ToolTipService.ToolTip="Edit the repo's database">
+                                        <Button.Content>
+                                            <Grid>
+                                                <ProgressRing
+                                                    Margin="0"
+                                                    VerticalAlignment="Center"
+                                                    Foreground="{ThemeResource QuinaryBrush}"
+                                                    Visibility="{x:Bind IsBusy, Mode=OneWay, Converter={StaticResource BooleanVisibility}, ConverterParameter=False}" />
+                                                <Image
+                                                    Width="30"
+                                                    Height="30"
+                                                    Margin="2,2,0,0"
+                                                    HorizontalAlignment="Right"
+                                                    Source="/Assets/Edit.png"
+                                                    Visibility="{x:Bind IsBusy, Mode=OneWay, Converter={StaticResource BooleanVisibilityInverse}, ConverterParameter=False}" />
+                                            </Grid>
+                                        </Button.Content>
+                                    </Button>
+                                    <TextBox
+                                        x:Name="tbBuffer"
+                                        Margin="1,14"
+                                        IsEnabled="{x:Bind IsBusy, Mode=OneWay, Converter={StaticResource BooleanInverter}}"
+                                        ToolTipService.ToolTip="Temporary holding area for identified file changes">
+                                        <TextBox.Header>
+                                            <TextBlock
+                                                Margin="0"
+                                                Padding="0"
+                                                FontWeight="Medium"
+                                                Foreground="{ThemeResource HeaderBrush}"
+                                                Text="Buffering folder" />
+                                        </TextBox.Header>
+                                    </TextBox>
+
+                                    <!--  Statistics  -->
+                                    <Pivot
+                                        x:Name="settingPivot"
+                                        Margin="1,10"
+                                        SelectionChanged="settingPivotOnSelectionChanged">
+                                        <!--
+                                        <Pivot.Title>
+                                            <TextBlock
+                                                Margin="0"
+                                                Padding="0"
+                                                FontWeight="Medium"
+                                                Foreground="{ThemeResource HeaderBrush}"
+                                                Text="Statistics" />
+                                        </Pivot.Title>
+                                        -->
+                                        <PivotItem x:Name="piTime">
+                                            <PivotItem.Header>
+                                                <ctrl:TabHeader
+                                                    Label="CPU"
+                                                    SelectedImage="/Assets/Searcher.png"
+                                                    ShowOutline="False"
+                                                    UnselectedImage="/Assets/SearcherDisabled.png" />
+                                            </PivotItem.Header>
+                                            <TextBlock
+                                                Margin="6,10"
+                                                Foreground="{ThemeResource PrimaryBrush}"
+                                                Text="{x:Bind TotalCPU, Mode=OneWay}" />
+                                        </PivotItem>
+                                        <PivotItem x:Name="piMemory">
+                                            <PivotItem.Header>
+                                                <ctrl:TabHeader
+                                                    Label="Memory"
+                                                    SelectedImage="/Assets/Searcher.png"
+                                                    ShowOutline="False"
+                                                    UnselectedImage="/Assets/SearcherDisabled.png" />
+                                            </PivotItem.Header>
+                                            <TextBlock
+                                                Margin="6,10"
+                                                Foreground="{ThemeResource PrimaryBrush}"
+                                                Text="{x:Bind MemoryCount, Mode=OneWay}" />
+                                        </PivotItem>
+                                        <PivotItem x:Name="piTally">
+                                            <PivotItem.Header>
+                                                <ctrl:TabHeader
+                                                    Label="Files"
+                                                    SelectedImage="/Assets/Searcher.png"
+                                                    ShowOutline="False"
+                                                    UnselectedImage="/Assets/SearcherDisabled.png" />
+                                            </PivotItem.Header>
+                                            <TextBlock
+                                                Margin="6,10"
+                                                Foreground="{ThemeResource PrimaryBrush}"
+                                                Text="{x:Bind InspectionCount, Mode=OneWay}" />
+                                        </PivotItem>
+                                        <PivotItem x:Name="piDisk">
+                                            <PivotItem.Header>
+                                                <ctrl:TabHeader
+                                                    Label="Disk"
+                                                    SelectedImage="/Assets/Searcher.png"
+                                                    ShowOutline="False"
+                                                    UnselectedImage="/Assets/SearcherDisabled.png" />
+                                            </PivotItem.Header>
+                                            <TextBlock
+                                                Margin="6,10"
+                                                Foreground="{ThemeResource PrimaryBrush}"
+                                                Text="{x:Bind DiskSpace, Mode=OneWay}" />
+                                        </PivotItem>
+                                    </Pivot>
+
+                                </StackPanel>
+                            </Grid>
+                        </StackPanel>
+
+                        <!--  Footer  -->
+                        <StackPanel
+                            x:Name="spFooter"
+                            Margin="20,20,20,20"
+                            HorizontalAlignment="Stretch"
+                            VerticalAlignment="Stretch"
+                            BorderBrush="{ThemeResource BorderBrush}"
+                            BorderThickness="2"
+                            CornerRadius="4"
+                            Orientation="Vertical"
+                            RelativePanel.AlignBottomWithPanel="True"
+                            RelativePanel.AlignLeftWithPanel="True"
+                            RelativePanel.AlignRightWithPanel="True">
+                            <StackPanel.ChildrenTransitions>
+                                <TransitionCollection>
+                                    <AddDeleteThemeTransition />
+                                </TransitionCollection>
+                            </StackPanel.ChildrenTransitions>
+                            <!--  Version Area  -->
+                            <Grid
+                                Margin="0"
+                                Background="{ThemeResource BackgroundBrush}"
+                                RowDefinitions="Auto">
+                                <!--
+                                    This serves no purpose, but exists as an example of how to make you own spinner.
+                                -->
+                                <Image
+                                    Width="30"
+                                    Height="30"
+                                    Margin="10,5,12,5"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Center"
+                                    Opacity="0.8"
+                                    Source="/Assets/SpinnerGear.png">
+                                    <Image.Resources>
+                                        <Storyboard x:Name="StoryboardPath" RepeatBehavior="Forever">
+                                            <DoubleAnimation
+                                                x:Name="dblAnimation"
+                                                Storyboard.TargetName="spinnerTransform"
+                                                Storyboard.TargetProperty="Angle"
+                                                From="0"
+                                                To="360"
+                                                Duration="00:00:01.8">
+                                                <DoubleAnimation.EasingFunction>
+                                                    <!-- <CircleEase EasingMode="EaseInOut" /> -->
+                                                    <BackEase Amplitude="0.5" EasingMode="EaseInOut" />
+                                                </DoubleAnimation.EasingFunction>
+                                            </DoubleAnimation>
+                                        </Storyboard>
+                                    </Image.Resources>
+                                    <Image.RenderTransform>
+                                        <RotateTransform x:Name="spinnerTransform" CenterX="15" CenterY="15" />
+                                    </Image.RenderTransform>
+                                </Image>
+                                <TextBlock
+                                    Grid.Row="0"
+                                    Margin="12,5,10,5"
+                                    HorizontalAlignment="Left"
+                                    VerticalAlignment="Center"
+                                    FontSize="14"
+                                    Foreground="{ThemeResource PrimaryBrush}"
+                                    Text="{x:Bind local:AssemblyHelper.GetVersion()}" />
+                            </Grid>
+                        </StackPanel>
+
+                    </RelativePanel>
+                </ScrollViewer>
+            </SplitView.Pane>
+
+            <!--  Content  -->
+            <Grid x:Name="mainGrid" RowDefinitions="Auto,Auto,Auto,2*,Auto">
+
+                <!--  Title  -->
+                <Grid Grid.Row="0" ColumnDefinitions="*,*">
+                    <TextBlock
+                        x:Name="tbAppName"
+                        Grid.Column="0"
+                        HorizontalAlignment="Left"
+                        FontSize="24"
+                        Foreground="DimGray"
+                        Text="{x:Bind local:AssemblyHelper.GetAssemblyName()}" />
+                    <TextBlock
+                        Grid.Column="1"
+                        Margin="0,0,10,0"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Bottom"
+                        FontSize="18"
+                        Foreground="DimGray"
+                        Opacity="0.6"
+                        Text="{x:Bind Path=sys:String.Format('{0:dddd, MMMM d, yyyy}', PageTime)}" />
+                </Grid>
+
+                <!--  Separator  -->
+                <Rectangle
+                    Grid.Row="1"
+                    Height="1"
+                    Margin="-15,5,-15,3"
+                    Stroke="{ThemeResource BorderBrush}" />
+
+                <!--  Control Input and Progress  -->
+                <StackPanel
+                    Grid.Row="2"
+                    Margin="0,10,0,2"
+                    HorizontalAlignment="Stretch"
+                    Orientation="Horizontal">
+                    <!--  [Example using FontIcon control for the graphic]
+                    <FontIcon
+                        Margin="5"
+                        HorizontalAlignment="Left"
+                        VerticalAlignment="Center"
+                        FontSize="28"
+                        Foreground="{ThemeResource SecondaryBrush}"
+                        Glyph="&#xec50;" />
+                    -->
+                    <!--  [Example using Image control for the graphic]
+                        <Image
+                            Width="38"
+                            Margin="1"
+                            Opacity="0.7"
+                            Source="/Assets/RepoFolderSmall.png" />
+                    -->
+                    <!--  [Example using Path control for the graphic]  -->
+                    <Viewbox
+                        Width="32"
+                        Height="32"
+                        Margin="1,-3,1,1">
+                        <Grid>
+                            <Path Data="M74.172 113.174 C 73.497 113.337,72.417 113.831,71.772 114.274 C 71.127 114.716,69.837 115.557,68.903 116.142 C 67.970 116.728,66.725 117.970,66.136 118.903 C 65.546 119.837,64.600 121.304,64.032 122.165 C 62.860 123.942,62.161 140.860,63.182 142.766 L 63.628 143.600 200.000 143.600 L 336.372 143.600 336.818 142.766 C 337.839 140.860,337.140 123.942,335.968 122.165 C 335.400 121.304,334.454 119.837,333.864 118.903 C 333.275 117.970,332.030 116.725,331.097 116.136 C 330.163 115.546,328.695 114.600,327.834 114.032 L 326.268 113.000 200.834 112.939 C 131.845 112.906,74.847 113.012,74.172 113.174" Fill="#e3e4e4" />
+                            <Path Data="M42.101 73.400 C 42.105 74.280,42.187 74.593,42.283 74.095 C 42.379 73.598,42.375 72.878,42.275 72.495 C 42.175 72.113,42.096 72.520,42.101 73.400 M344.300 92.282 C 344.795 92.378,345.605 92.378,346.100 92.282 C 346.595 92.187,346.190 92.109,345.200 92.109 C 344.210 92.109,343.805 92.187,344.300 92.282 M357.709 104.800 C 357.709 105.790,357.787 106.195,357.882 105.700 C 357.978 105.205,357.978 104.395,357.882 103.900 C 357.787 103.405,357.709 103.810,357.709 104.800 M161.468 180.206 L 158.888 182.811 159.344 184.334 C 159.674 185.437,161.122 187.191,164.600 190.706 C 167.240 193.374,169.921 196.206,170.558 197.000 L 171.717 198.443 170.758 200.491 C 169.310 203.584,169.339 210.100,170.809 211.846 C 171.363 212.505,172.165 214.069,172.591 215.322 C 173.017 216.575,173.590 217.600,173.864 217.600 C 174.138 217.600,174.920 218.294,175.602 219.143 C 176.366 220.093,177.419 220.859,178.345 221.136 C 179.172 221.384,180.287 222.054,180.824 222.625 L 181.800 223.664 181.800 250.000 L 181.800 276.336 180.824 277.375 C 180.287 277.946,179.172 278.616,178.345 278.864 C 177.419 279.141,176.366 279.907,175.602 280.857 C 174.920 281.706,174.143 282.400,173.875 282.400 C 173.607 282.400,173.059 283.345,172.658 284.500 C 172.257 285.655,171.449 287.305,170.864 288.166 C 169.496 290.179,169.249 297.308,170.500 298.690 C 170.886 299.116,171.650 300.569,172.199 301.920 C 173.472 305.054,176.270 307.935,178.968 308.891 C 180.050 309.275,181.370 309.996,181.900 310.494 C 183.453 311.953,191.158 311.855,193.284 310.349 C 194.100 309.771,195.603 309.051,196.625 308.749 C 197.932 308.364,198.650 307.877,199.048 307.107 C 199.359 306.506,200.107 305.758,200.711 305.446 C 201.498 305.039,202.021 304.250,202.566 302.648 C 202.983 301.422,203.670 300.046,204.093 299.592 C 205.894 297.659,205.887 289.934,204.083 287.997 C 203.665 287.549,202.983 286.178,202.566 284.952 C 202.021 283.350,201.498 282.561,200.711 282.154 C 200.107 281.842,199.358 281.095,199.045 280.493 C 198.655 279.743,197.838 279.176,196.441 278.684 C 192.796 277.403,193.000 279.081,193.000 250.400 C 193.000 227.069,193.048 225.312,193.721 224.079 C 194.700 222.287,195.418 222.109,196.663 223.354 C 197.238 223.929,197.868 224.400,198.063 224.400 C 198.467 224.400,218.802 244.838,220.558 247.011 L 221.717 248.443 220.758 250.491 C 219.299 253.608,219.339 260.099,220.828 261.869 C 221.393 262.541,222.162 264.060,222.535 265.245 C 223.037 266.837,223.527 267.579,224.411 268.083 C 225.069 268.459,225.764 269.179,225.956 269.683 C 226.196 270.313,226.889 270.772,228.169 271.149 C 229.194 271.451,230.700 272.171,231.516 272.749 C 233.600 274.225,241.729 274.358,243.268 272.942 C 243.780 272.469,245.160 271.749,246.334 271.342 C 247.720 270.860,248.685 270.234,249.088 269.554 C 249.429 268.979,250.179 268.229,250.754 267.888 C 251.434 267.485,252.060 266.520,252.542 265.134 C 252.949 263.960,253.624 262.628,254.041 262.174 C 255.759 260.304,255.961 253.076,254.353 251.031 C 253.929 250.493,253.169 248.951,252.663 247.605 C 252.000 245.840,251.399 244.949,250.507 244.407 C 249.828 243.993,249.159 243.303,249.023 242.871 C 248.864 242.372,247.902 241.762,246.372 241.189 C 245.050 240.695,243.485 239.911,242.894 239.445 C 241.246 238.151,233.669 238.213,231.523 239.540 C 230.105 240.415,228.400 240.269,228.400 239.272 C 228.400 239.107,227.843 238.643,227.161 238.241 C 225.677 237.364,206.527 218.273,205.437 216.583 C 205.017 215.932,204.432 215.256,204.137 215.080 C 203.433 214.661,203.455 213.585,204.188 212.538 C 205.877 210.126,205.809 202.250,204.083 200.397 C 203.665 199.949,202.983 198.578,202.566 197.352 C 202.015 195.731,201.501 194.962,200.686 194.541 C 200.070 194.222,199.367 193.526,199.124 192.994 C 198.832 192.351,198.035 191.810,196.758 191.386 C 195.699 191.034,194.151 190.264,193.317 189.673 C 191.146 188.137,184.842 188.082,181.662 189.571 L 179.590 190.541 178.347 189.271 C 177.664 188.572,176.946 188.000,176.751 188.000 C 176.557 188.000,174.283 185.872,171.699 183.271 C 167.727 179.274,165.503 177.600,164.164 177.600 C 164.101 177.600,162.887 178.773,161.468 180.206 M42.400 340.920 C 42.400 344.440,42.726 345.200,44.237 345.200 C 45.130 345.200,45.600 345.886,45.600 347.190 C 45.600 347.946,46.350 348.400,47.601 348.400 C 48.096 348.400,48.424 348.800,48.605 349.624 C 48.779 350.415,49.224 350.981,49.863 351.224 C 50.474 351.456,107.879 351.600,200.000 351.600 C 292.121 351.600,349.526 351.456,350.137 351.224 C 350.776 350.981,351.221 350.415,351.395 349.624 C 351.576 348.800,351.904 348.400,352.399 348.400 C 353.650 348.400,354.400 347.946,354.400 347.190 C 354.400 345.886,354.870 345.200,355.763 345.200 C 357.274 345.200,357.600 344.440,357.600 340.920 L 357.600 337.600 356.043 337.600 C 354.607 337.600,354.439 337.721,353.861 339.163 C 353.388 340.348,352.904 340.836,351.866 341.178 C 351.113 341.427,350.160 342.002,349.749 342.456 C 347.642 344.784,360.496 344.600,200.000 344.600 C 39.504 344.600,52.358 344.784,50.251 342.456 C 49.840 342.002,48.887 341.427,48.134 341.178 C 47.096 340.836,46.612 340.348,46.139 339.163 C 45.561 337.721,45.393 337.600,43.957 337.600 L 42.400 337.600 42.400 340.920" Fill="#213b59" />
+                            <Path Data="M50.000 61.300 C 50.000 61.465,49.798 61.555,49.552 61.500 C 49.306 61.445,48.877 62.030,48.600 62.800 C 48.323 63.570,47.876 64.149,47.606 64.086 C 46.524 63.834,45.674 64.479,45.439 65.732 C 45.245 66.768,44.928 67.114,43.897 67.418 C 42.958 67.695,42.558 68.076,42.449 68.800 C 42.163 70.686,42.056 156.601,42.340 155.625 C 42.557 154.882,42.955 154.612,44.012 154.491 C 45.762 154.291,46.316 153.826,47.080 151.916 C 47.701 150.366,50.886 147.200,51.826 147.200 C 52.108 147.200,52.865 146.757,53.508 146.216 C 54.796 145.132,57.290 144.425,59.876 144.410 C 62.229 144.396,62.200 144.541,62.200 132.933 C 62.200 122.687,62.219 122.442,63.098 121.333 C 63.592 120.710,64.341 119.570,64.762 118.800 C 65.649 117.177,67.290 115.567,69.000 114.643 C 69.660 114.286,70.708 113.591,71.329 113.097 L 72.459 112.200 200.000 112.200 L 327.541 112.200 328.671 113.097 C 329.292 113.591,330.340 114.286,331.000 114.643 C 332.710 115.567,334.351 117.177,335.238 118.800 C 335.659 119.570,336.408 120.710,336.902 121.333 C 337.781 122.442,337.800 122.687,337.800 132.933 C 337.800 144.541,337.771 144.396,340.124 144.410 C 342.710 144.425,345.204 145.132,346.492 146.216 C 347.135 146.757,347.892 147.200,348.174 147.200 C 349.114 147.200,352.299 150.366,352.920 151.916 C 353.684 153.826,354.238 154.291,355.988 154.491 C 357.042 154.612,357.446 154.884,357.667 155.625 C 358.001 156.742,357.815 101.018,357.481 99.800 C 357.360 99.360,357.247 98.885,357.231 98.744 C 357.214 98.604,356.975 98.497,356.700 98.507 C 355.161 98.565,354.823 98.331,354.581 97.037 C 354.363 95.877,354.123 95.637,352.963 95.419 C 352.202 95.277,351.573 94.907,351.540 94.582 C 351.507 94.262,351.462 93.775,351.440 93.500 C 351.338 92.229,349.522 92.199,266.500 92.084 L 182.800 91.968 182.738 81.284 C 182.704 75.408,182.709 70.201,182.751 69.713 C 182.849 68.555,181.359 67.065,180.363 67.326 C 179.724 67.493,179.600 67.306,179.600 66.177 C 179.600 64.749,178.479 63.731,177.375 64.154 C 176.689 64.417,175.911 63.096,176.243 62.232 C 176.381 61.872,176.233 61.511,175.894 61.381 C 174.997 61.037,50.000 60.956,50.000 61.300 M61.210 138.226 C 61.768 139.693,61.699 142.397,61.100 142.568 C 60.825 142.647,58.852 142.881,56.716 143.089 C 53.102 143.441,52.700 143.571,50.916 144.962 C 49.862 145.785,48.503 146.557,47.896 146.679 C 47.069 146.846,46.599 147.339,46.019 148.651 C 45.314 150.243,45.118 150.400,43.822 150.400 L 42.400 150.400 42.400 148.200 L 42.400 146.000 43.992 146.000 C 45.428 146.000,45.659 145.853,46.355 144.500 C 47.735 141.818,52.856 138.045,55.764 137.568 C 59.478 136.959,60.789 137.118,61.210 138.226 M344.052 137.553 C 347.168 138.067,352.217 141.724,353.645 144.500 C 354.341 145.853,354.572 146.000,356.008 146.000 L 357.600 146.000 357.600 148.200 L 357.600 150.400 356.178 150.400 C 354.882 150.400,354.686 150.243,353.981 148.651 C 353.401 147.339,352.931 146.846,352.104 146.679 C 351.497 146.557,350.138 145.785,349.084 144.962 C 347.300 143.571,346.898 143.441,343.284 143.089 C 338.207 142.595,338.400 142.684,338.400 140.839 C 338.400 137.213,339.193 136.752,344.052 137.553 M163.303 174.440 C 162.829 174.615,162.164 175.295,161.825 175.951 C 161.486 176.607,160.834 177.262,160.377 177.407 C 159.919 177.553,159.215 178.213,158.812 178.876 C 158.410 179.538,157.522 180.419,156.840 180.834 C 155.779 181.479,155.600 181.824,155.600 183.220 C 155.600 185.526,155.810 185.812,162.217 192.237 L 167.968 198.005 167.735 203.902 C 167.457 210.971,167.916 214.182,169.389 215.475 C 169.938 215.956,170.680 217.083,171.038 217.979 C 171.438 218.978,172.020 219.695,172.545 219.834 C 173.015 219.958,173.760 220.620,174.200 221.305 C 174.640 221.990,175.450 222.672,176.000 222.821 C 176.550 222.970,177.675 223.734,178.500 224.519 L 180.000 225.946 180.000 250.000 L 180.000 274.054 178.500 275.481 C 177.675 276.266,176.550 277.030,176.000 277.179 C 175.450 277.328,174.640 277.998,174.200 278.669 C 173.760 279.340,173.040 280.049,172.600 280.244 C 172.160 280.440,171.496 281.230,171.125 282.000 C 170.753 282.770,169.985 283.855,169.418 284.410 C 166.934 286.845,166.896 300.907,169.369 303.063 C 169.913 303.537,170.628 304.572,170.958 305.362 C 171.288 306.152,171.998 306.998,172.535 307.243 C 173.072 307.488,173.712 308.128,173.957 308.665 C 174.202 309.202,175.063 309.918,175.870 310.255 C 176.678 310.593,177.669 311.289,178.073 311.802 C 180.100 314.379,194.961 314.323,197.071 311.730 C 197.550 311.141,198.536 310.466,199.261 310.229 C 199.986 309.993,200.789 309.378,201.045 308.863 C 201.301 308.347,202.071 307.585,202.755 307.169 C 203.504 306.713,204.000 306.082,204.000 305.583 C 204.000 305.128,204.543 304.259,205.206 303.653 C 208.009 301.093,208.160 285.972,205.400 284.163 C 204.872 283.818,204.236 282.916,203.987 282.160 C 203.717 281.343,203.082 280.552,202.418 280.209 C 201.804 279.892,201.205 279.262,201.087 278.811 C 200.966 278.347,200.220 277.717,199.375 277.364 C 198.552 277.020,197.184 276.016,196.336 275.133 L 194.794 273.528 194.897 249.897 C 194.976 231.769,195.113 226.229,195.487 226.104 C 195.754 226.015,200.923 230.897,206.972 236.953 L 217.970 247.965 217.736 253.882 C 217.450 261.140,217.898 264.040,219.574 265.783 C 220.218 266.452,220.873 267.520,221.030 268.156 C 221.209 268.885,221.701 269.460,222.358 269.711 C 222.931 269.929,223.760 270.658,224.200 271.329 C 224.640 272.001,225.504 272.683,226.119 272.846 C 226.735 273.008,227.598 273.598,228.037 274.157 C 230.207 276.915,244.683 276.820,247.232 274.030 C 247.849 273.353,248.697 272.800,249.115 272.800 C 249.923 272.800,250.916 271.857,251.327 270.700 C 251.463 270.315,251.823 270.000,252.125 270.000 C 252.869 270.000,254.000 268.700,254.000 267.846 C 254.000 267.466,254.543 266.659,255.206 266.053 C 257.914 263.580,258.174 248.262,255.534 246.690 C 255.082 246.420,254.380 245.441,253.975 244.513 C 253.494 243.409,252.914 242.743,252.298 242.589 C 251.749 242.451,251.176 241.871,250.920 241.194 C 250.627 240.417,250.108 239.950,249.342 239.774 C 248.714 239.629,247.750 238.991,247.200 238.355 C 245.798 236.735,242.852 236.265,235.523 236.492 C 228.458 236.712,230.768 238.175,217.926 225.348 L 207.200 214.635 207.198 207.417 C 207.195 199.543,206.860 197.520,205.400 196.563 C 204.872 196.218,204.237 195.317,203.988 194.563 C 203.739 193.809,203.088 192.957,202.542 192.671 C 201.996 192.385,201.331 191.712,201.064 191.175 C 200.797 190.639,199.976 190.004,199.239 189.764 C 198.502 189.523,197.607 188.960,197.250 188.510 C 195.862 186.765,194.980 186.601,186.882 186.578 L 179.164 186.556 173.275 180.701 C 167.122 174.584,165.562 173.605,163.303 174.440 M166.116 176.446 C 167.042 176.911,169.870 179.395,172.400 181.966 C 178.146 187.805,179.271 188.547,181.427 187.916 C 182.292 187.662,185.070 187.446,187.600 187.434 C 192.522 187.410,191.895 187.236,197.401 190.152 C 204.076 193.687,207.604 202.358,206.034 211.372 C 205.398 215.023,205.336 214.936,216.714 226.322 C 228.349 237.967,228.984 238.468,231.331 237.889 C 232.249 237.663,235.083 237.462,237.629 237.442 L 242.258 237.407 245.591 239.147 C 249.694 241.288,252.087 243.635,254.413 247.800 L 256.200 251.000 256.200 256.200 C 256.200 260.287,256.058 261.657,255.539 262.600 C 255.175 263.260,254.415 264.676,253.849 265.746 C 252.534 268.237,249.437 271.334,246.946 272.649 C 245.876 273.215,244.460 273.975,243.800 274.339 C 242.856 274.859,241.485 275.000,237.370 275.000 L 232.139 275.000 229.709 273.500 C 228.373 272.675,227.100 272.000,226.880 272.000 C 226.661 272.000,225.593 271.130,224.507 270.067 C 222.771 268.367,221.562 266.553,219.292 262.240 C 218.539 260.809,218.447 253.163,219.148 250.273 C 219.577 248.506,219.541 248.240,218.719 247.073 C 217.510 245.357,198.084 225.943,196.714 225.083 C 193.983 223.366,194.000 223.206,194.000 250.205 C 194.000 277.072,193.895 276.102,196.957 277.457 C 199.083 278.397,202.673 282.047,204.200 284.820 C 209.409 294.282,205.671 305.639,195.636 310.841 L 192.272 312.585 187.601 312.593 L 182.931 312.600 179.502 310.829 C 175.184 308.599,172.640 306.046,170.372 301.666 L 168.646 298.332 168.646 293.771 L 168.646 289.210 170.360 285.905 C 172.333 282.101,175.421 278.704,177.912 277.596 C 181.270 276.102,181.182 276.837,181.182 250.000 C 181.182 223.175,181.291 224.090,177.904 222.450 C 175.157 221.120,172.559 218.274,170.504 214.341 L 168.659 210.812 168.672 206.506 C 168.679 204.138,168.894 201.333,169.150 200.273 C 169.742 197.823,169.503 197.462,163.019 190.988 C 160.122 188.095,157.903 185.517,157.455 184.523 L 156.710 182.870 160.255 179.264 C 164.303 175.147,163.908 175.337,166.116 176.446 M42.262 333.400 C 42.497 336.410,42.507 336.453,42.876 336.084 C 43.724 335.236,45.475 336.065,46.171 337.644 C 47.232 340.048,52.923 343.688,56.200 344.058 C 62.664 344.788,345.361 344.224,346.600 343.478 C 351.735 340.389,352.641 339.666,353.586 337.904 C 354.568 336.074,356.249 335.209,357.124 336.084 C 357.493 336.453,357.503 336.410,357.738 333.400 C 357.824 332.300,357.818 331.968,357.725 332.662 C 357.571 333.816,357.453 333.907,356.342 333.732 C 354.876 333.501,353.949 334.240,352.806 336.553 C 352.358 337.459,351.409 338.608,350.696 339.106 C 349.983 339.604,348.410 340.684,347.200 341.506 L 345.000 343.000 199.932 343.000 L 54.864 343.000 53.932 342.145 C 53.420 341.675,52.280 340.922,51.400 340.472 C 49.318 339.408,47.642 337.797,46.989 336.235 C 46.201 334.350,45.080 333.508,43.658 333.732 C 42.547 333.907,42.429 333.816,42.275 332.662 C 42.182 331.968,42.176 332.300,42.262 333.400" Fill="#4e76b5" />
+                            <Path Data="M86.100 61.100 C 100.565 61.158,124.235 61.158,138.700 61.100 C 153.165 61.042,141.330 60.994,112.400 60.994 C 83.470 60.994,71.635 61.042,86.100 61.100 M72.698 112.399 C 72.092 112.582,71.044 113.197,70.368 113.766 C 69.692 114.335,68.979 114.800,68.783 114.800 C 68.109 114.800,65.551 117.328,64.775 118.762 C 64.347 119.553,63.592 120.710,63.098 121.333 C 62.219 122.442,62.200 122.687,62.200 132.933 C 62.200 144.541,62.229 144.396,59.876 144.410 C 57.290 144.425,54.796 145.132,53.508 146.216 C 52.865 146.757,52.108 147.200,51.826 147.200 C 50.886 147.200,47.701 150.366,47.080 151.916 C 46.316 153.826,45.762 154.291,44.012 154.491 C 41.972 154.724,42.083 149.756,42.043 243.200 C 42.004 337.687,41.937 334.003,43.686 333.727 C 45.078 333.508,46.208 334.366,46.989 336.235 C 47.642 337.797,49.318 339.408,51.400 340.472 C 52.280 340.922,53.420 341.675,53.932 342.145 L 54.864 343.000 199.932 343.000 L 345.000 343.000 347.200 341.506 C 348.410 340.684,349.983 339.604,350.696 339.106 C 351.409 338.608,352.358 337.459,352.806 336.553 C 353.941 334.257,354.879 333.501,356.314 333.727 C 358.063 334.003,357.996 337.687,357.957 243.200 C 357.917 149.756,358.028 154.724,355.988 154.491 C 354.238 154.291,353.684 153.826,352.920 151.916 C 352.299 150.366,349.114 147.200,348.174 147.200 C 347.892 147.200,347.135 146.757,346.492 146.216 C 345.204 145.132,342.710 144.425,340.124 144.410 C 337.771 144.396,337.800 144.541,337.800 132.933 C 337.800 122.687,337.781 122.442,336.902 121.333 C 336.408 120.710,335.659 119.570,335.238 118.800 C 334.351 117.177,332.710 115.567,331.000 114.643 C 330.340 114.286,329.292 113.591,328.671 113.097 L 327.541 112.200 200.671 112.133 C 130.892 112.096,73.304 112.216,72.698 112.399 M327.834 114.032 C 328.695 114.600,330.163 115.546,331.097 116.136 C 332.030 116.725,333.275 117.970,333.864 118.903 C 334.454 119.837,335.400 121.304,335.968 122.165 C 337.140 123.942,337.839 140.860,336.818 142.766 L 336.372 143.600 200.000 143.600 L 63.628 143.600 63.182 142.766 C 62.161 140.860,62.860 123.942,64.032 122.165 C 64.600 121.304,65.546 119.837,66.136 118.903 C 66.725 117.970,67.970 116.728,68.903 116.142 C 69.837 115.557,71.127 114.716,71.772 114.274 C 72.417 113.831,73.497 113.337,74.172 113.174 C 74.847 113.012,131.845 112.906,200.834 112.939 L 326.268 113.000 327.834 114.032 M173.275 180.701 L 179.164 186.556 186.882 186.578 C 194.980 186.601,195.862 186.765,197.250 188.510 C 197.607 188.960,198.502 189.523,199.239 189.764 C 199.976 190.004,200.797 190.639,201.064 191.175 C 201.331 191.712,201.996 192.385,202.542 192.671 C 203.088 192.957,203.739 193.809,203.988 194.563 C 204.237 195.317,204.872 196.218,205.400 196.563 C 206.860 197.520,207.195 199.543,207.198 207.417 L 207.200 214.635 217.926 225.348 C 230.768 238.175,228.458 236.712,235.523 236.492 C 242.852 236.265,245.798 236.735,247.200 238.355 C 247.750 238.991,248.714 239.629,249.342 239.774 C 250.108 239.950,250.627 240.417,250.920 241.194 C 251.176 241.871,251.749 242.451,252.298 242.589 C 252.914 242.743,253.494 243.409,253.975 244.513 C 254.380 245.441,255.082 246.420,255.534 246.690 C 256.805 247.447,257.195 249.679,257.198 256.203 C 257.200 263.033,256.903 264.503,255.206 266.053 C 254.543 266.659,254.000 267.466,254.000 267.846 C 254.000 268.700,252.869 270.000,252.125 270.000 C 251.823 270.000,251.463 270.315,251.327 270.700 C 250.916 271.857,249.923 272.800,249.115 272.800 C 248.697 272.800,247.849 273.353,247.232 274.030 C 244.683 276.820,230.207 276.915,228.037 274.157 C 227.598 273.598,226.735 273.008,226.119 272.846 C 225.504 272.683,224.640 272.001,224.200 271.329 C 223.760 270.658,222.931 269.929,222.358 269.711 C 221.701 269.460,221.209 268.885,221.030 268.156 C 220.873 267.520,220.218 266.452,219.574 265.783 C 217.898 264.040,217.450 261.140,217.736 253.882 L 217.970 247.965 206.972 236.953 C 200.923 230.897,195.754 226.015,195.487 226.104 C 195.113 226.229,194.976 231.769,194.897 249.897 L 194.794 273.528 196.336 275.133 C 197.184 276.016,198.552 277.020,199.375 277.364 C 200.220 277.717,200.966 278.347,201.087 278.811 C 201.205 279.262,201.804 279.892,202.418 280.209 C 203.082 280.552,203.717 281.343,203.987 282.160 C 204.236 282.916,204.872 283.818,205.400 284.163 C 206.817 285.091,207.195 287.122,207.198 293.803 C 207.200 300.633,206.903 302.103,205.206 303.653 C 204.543 304.259,204.000 305.128,204.000 305.583 C 204.000 306.082,203.504 306.713,202.755 307.169 C 202.071 307.585,201.301 308.347,201.045 308.863 C 200.789 309.378,199.986 309.993,199.261 310.229 C 198.536 310.466,197.550 311.141,197.071 311.730 C 194.961 314.323,180.100 314.379,178.073 311.802 C 177.669 311.289,176.678 310.593,175.870 310.255 C 175.063 309.918,174.202 309.202,173.957 308.665 C 173.712 308.128,173.072 307.488,172.535 307.243 C 171.998 306.998,171.288 306.152,170.958 305.362 C 170.628 304.572,169.913 303.537,169.369 303.063 C 166.896 300.907,166.934 286.845,169.418 284.410 C 169.985 283.855,170.753 282.770,171.125 282.000 C 171.496 281.230,172.160 280.440,172.600 280.244 C 173.040 280.049,173.760 279.340,174.200 278.669 C 174.640 277.998,175.450 277.328,176.000 277.179 C 176.550 277.030,177.675 276.266,178.500 275.481 L 180.000 274.054 180.000 250.000 L 180.000 225.946 178.500 224.519 C 177.675 223.734,176.550 222.970,176.000 222.821 C 175.450 222.672,174.640 221.990,174.200 221.305 C 173.760 220.620,173.015 219.958,172.545 219.834 C 172.020 219.695,171.438 218.978,171.038 217.979 C 170.680 217.083,169.938 215.956,169.389 215.475 C 167.916 214.182,167.457 210.971,167.735 203.902 L 167.968 198.005 162.217 192.237 C 155.810 185.812,155.600 185.526,155.600 183.220 C 155.600 181.824,155.779 181.479,156.840 180.834 C 157.522 180.419,158.410 179.538,158.812 178.876 C 159.215 178.213,159.919 177.553,160.377 177.407 C 160.834 177.262,161.486 176.607,161.825 175.951 C 163.601 172.517,166.075 173.544,173.275 180.701" Fill="#5494e3" />
+                            <Path Data="M55.764 137.568 C 52.856 138.045,47.735 141.818,46.355 144.500 C 45.659 145.853,45.428 146.000,43.992 146.000 L 42.400 146.000 42.400 148.200 L 42.400 150.400 43.822 150.400 C 45.118 150.400,45.314 150.243,46.019 148.651 C 46.599 147.339,47.069 146.846,47.896 146.679 C 48.503 146.557,49.862 145.785,50.916 144.962 C 52.700 143.571,53.102 143.441,56.716 143.089 C 61.793 142.595,61.600 142.684,61.600 140.839 C 61.600 137.219,60.761 136.749,55.764 137.568 M338.790 138.226 C 338.232 139.693,338.301 142.397,338.900 142.568 C 339.175 142.647,341.148 142.881,343.284 143.089 C 346.898 143.441,347.300 143.571,349.084 144.962 C 350.138 145.785,351.497 146.557,352.104 146.679 C 352.931 146.846,353.401 147.339,353.981 148.651 C 354.686 150.243,354.882 150.400,356.178 150.400 L 357.600 150.400 357.600 148.200 L 357.600 146.000 356.008 146.000 C 354.572 146.000,354.341 145.853,353.645 144.500 C 351.034 139.424,340.092 134.803,338.790 138.226 M160.255 179.264 L 156.710 182.870 157.455 184.523 C 157.903 185.517,160.122 188.095,163.019 190.988 C 169.503 197.462,169.742 197.823,169.150 200.273 C 168.894 201.333,168.679 204.138,168.672 206.506 L 168.659 210.812 170.504 214.341 C 172.559 218.274,175.157 221.120,177.904 222.450 C 181.291 224.090,181.182 223.175,181.182 250.000 C 181.182 276.837,181.270 276.102,177.912 277.596 C 175.421 278.704,172.333 282.101,170.360 285.905 L 168.646 289.210 168.646 293.771 L 168.646 298.332 170.372 301.666 C 172.640 306.046,175.184 308.599,179.502 310.829 L 182.931 312.600 187.601 312.593 L 192.272 312.585 195.636 310.841 C 207.740 304.566,210.219 289.954,200.800 280.412 C 199.590 279.186,197.861 277.856,196.957 277.457 C 193.895 276.102,194.000 277.072,194.000 250.205 C 194.000 223.206,193.983 223.366,196.714 225.083 C 198.084 225.943,217.510 245.357,218.719 247.073 C 219.541 248.240,219.577 248.506,219.148 250.273 C 218.447 253.163,218.539 260.809,219.292 262.240 C 221.562 266.553,222.771 268.367,224.507 270.067 C 225.593 271.130,226.661 272.000,226.880 272.000 C 227.100 272.000,228.373 272.675,229.709 273.500 L 232.139 275.000 237.370 275.000 C 241.485 275.000,242.856 274.859,243.800 274.339 C 244.460 273.975,245.876 273.215,246.946 272.649 C 249.437 271.334,252.534 268.237,253.849 265.746 C 254.415 264.676,255.175 263.260,255.539 262.600 C 256.058 261.657,256.200 260.287,256.200 256.200 L 256.200 251.000 254.413 247.800 C 252.087 243.635,249.694 241.288,245.591 239.147 L 242.258 237.407 237.629 237.442 C 235.083 237.462,232.249 237.663,231.331 237.889 C 228.984 238.468,228.349 237.967,216.714 226.322 C 205.336 214.936,205.398 215.023,206.034 211.372 C 207.604 202.358,204.076 193.687,197.401 190.152 C 191.895 187.236,192.522 187.410,187.600 187.434 C 185.070 187.446,182.292 187.662,181.427 187.916 C 179.271 188.547,178.146 187.805,172.400 181.966 C 168.444 177.946,165.275 175.522,164.116 175.629 C 163.942 175.645,162.205 177.281,160.255 179.264 M165.640 178.071 C 166.485 178.364,168.781 180.335,171.699 183.271 C 174.283 185.872,176.557 188.000,176.751 188.000 C 176.946 188.000,177.664 188.572,178.347 189.271 L 179.590 190.541 181.662 189.571 C 184.842 188.082,191.146 188.137,193.317 189.673 C 194.151 190.264,195.699 191.034,196.758 191.386 C 198.035 191.810,198.832 192.351,199.124 192.994 C 199.367 193.526,200.070 194.222,200.686 194.541 C 201.501 194.962,202.015 195.731,202.566 197.352 C 202.983 198.578,203.665 199.949,204.083 200.397 C 205.809 202.250,205.877 210.126,204.188 212.538 C 203.455 213.585,203.433 214.661,204.137 215.080 C 204.432 215.256,205.017 215.932,205.437 216.583 C 206.527 218.273,225.677 237.364,227.161 238.241 C 227.843 238.643,228.400 239.107,228.400 239.272 C 228.400 240.269,230.105 240.415,231.523 239.540 C 233.669 238.213,241.246 238.151,242.894 239.445 C 243.485 239.911,245.050 240.695,246.372 241.189 C 247.902 241.762,248.864 242.372,249.023 242.871 C 249.159 243.303,249.828 243.993,250.507 244.407 C 251.399 244.949,252.000 245.840,252.663 247.605 C 253.169 248.951,253.929 250.493,254.353 251.031 C 255.961 253.076,255.759 260.304,254.041 262.174 C 253.624 262.628,252.949 263.960,252.542 265.134 C 252.060 266.520,251.434 267.485,250.754 267.888 C 250.179 268.229,249.429 268.979,249.088 269.554 C 248.685 270.234,247.720 270.860,246.334 271.342 C 245.160 271.749,243.780 272.469,243.268 272.942 C 241.729 274.358,233.600 274.225,231.516 272.749 C 230.700 272.171,229.194 271.451,228.169 271.149 C 226.889 270.772,226.196 270.313,225.956 269.683 C 225.764 269.179,225.069 268.459,224.411 268.083 C 223.527 267.579,223.037 266.837,222.535 265.245 C 222.162 264.060,221.393 262.541,220.828 261.869 C 219.339 260.099,219.299 253.608,220.758 250.491 L 221.717 248.443 220.558 247.011 C 218.802 244.838,198.467 224.400,198.063 224.400 C 197.868 224.400,197.238 223.929,196.663 223.354 C 195.418 222.109,194.700 222.287,193.721 224.079 C 193.048 225.312,193.000 227.069,193.000 250.400 C 193.000 279.081,192.796 277.403,196.441 278.684 C 197.838 279.176,198.655 279.743,199.045 280.493 C 199.358 281.095,200.107 281.842,200.711 282.154 C 201.498 282.561,202.021 283.350,202.566 284.952 C 202.983 286.178,203.665 287.549,204.083 287.997 C 205.887 289.934,205.894 297.659,204.093 299.592 C 203.670 300.046,202.983 301.422,202.566 302.648 C 202.021 304.250,201.498 305.039,200.711 305.446 C 200.107 305.758,199.359 306.506,199.048 307.107 C 198.650 307.877,197.932 308.364,196.625 308.749 C 195.603 309.051,194.100 309.771,193.284 310.349 C 191.158 311.855,183.453 311.953,181.900 310.494 C 181.370 309.996,180.050 309.275,178.968 308.891 C 176.270 307.935,173.472 305.054,172.199 301.920 C 171.650 300.569,170.886 299.116,170.500 298.690 C 169.249 297.308,169.496 290.179,170.864 288.166 C 171.449 287.305,172.257 285.655,172.658 284.500 C 173.059 283.345,173.607 282.400,173.875 282.400 C 174.143 282.400,174.920 281.706,175.602 280.857 C 176.366 279.907,177.419 279.141,178.345 278.864 C 179.172 278.616,180.287 277.946,180.824 277.375 L 181.800 276.336 181.800 250.000 L 181.800 223.664 180.824 222.625 C 180.287 222.054,179.172 221.384,178.345 221.136 C 177.419 220.859,176.366 220.093,175.602 219.143 C 174.920 218.294,174.138 217.600,173.864 217.600 C 173.590 217.600,173.017 216.575,172.591 215.322 C 172.165 214.069,171.363 212.505,170.809 211.846 C 169.339 210.100,169.310 203.584,170.758 200.491 L 171.717 198.443 170.558 197.000 C 169.921 196.206,167.240 193.374,164.600 190.706 C 161.122 187.191,159.674 185.437,159.344 184.334 L 158.888 182.811 161.468 180.206 C 162.887 178.773,164.101 177.600,164.164 177.600 C 164.228 177.600,164.892 177.812,165.640 178.071 M42.488 336.648 C 42.417 337.501,42.571 337.600,43.961 337.600 C 45.392 337.600,45.562 337.722,46.139 339.163 C 46.612 340.348,47.096 340.836,48.134 341.178 C 48.887 341.427,49.840 342.002,50.251 342.456 C 52.358 344.784,39.504 344.600,200.000 344.600 C 360.496 344.600,347.642 344.784,349.749 342.456 C 350.160 342.002,351.113 341.427,351.866 341.178 C 352.904 340.836,353.388 340.348,353.861 339.163 C 354.438 337.722,354.608 337.600,356.039 337.600 C 357.426 337.600,357.583 337.499,357.513 336.655 C 357.438 335.748,354.850 335.480,354.493 336.342 C 353.380 339.028,352.153 340.138,346.600 343.478 C 345.361 344.224,62.664 344.788,56.200 344.058 C 52.894 343.684,47.232 340.048,46.155 337.607 C 45.670 336.509,45.186 335.990,44.623 335.969 C 44.170 335.953,43.522 335.884,43.183 335.817 C 42.781 335.738,42.539 336.027,42.488 336.648" Fill="#3c648c" />
+                        </Grid>
+                    </Viewbox>
+                    <!--  Main repo path  -->
+                    <TextBox
+                        x:Name="tbPath"
+                        MinWidth="380"
+                        Margin="6"
+                        Padding="2"
+                        HorizontalAlignment="Left"
+                        VerticalContentAlignment="Bottom"
+                        AcceptsReturn="True"
+                        GotFocus="tbPathOnGotFocus"
+                        IsEnabled="{x:Bind IsBusy, Mode=OneWay, Converter={StaticResource BooleanInverter}}"
+                        PreviewKeyDown="TextBoxOnPreviewKeyDown"
+                        Text="{x:Bind RepoPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                    <!--  Open settings button  -->
+                    <Button
+                        MinHeight="34"
+                        Margin="6,5,1,5"
+                        HorizontalContentAlignment="Right"
+                        Click="OnSettingsClick"
+                        Style="{StaticResource MyButtonStyle}"
+                        ToolTipService.ToolTip="Open settings pane">
+                        <FontIcon FontSize="16" Glyph="&#xe713;" />
+                    </Button>
+
+                    <TeachingTip
+                        x:Name="teachingTip"
+                        IsLightDismissEnabled="True"
+                        Subtitle="Enter the source folder path of the repository you want to analyze for changes."
+                        Target="{x:Bind tbPath}">
+                        <TeachingTip.Content>
+                            <TextBlock
+                                Margin="2,8,2,2"
+                                Foreground="Gray"
+                                Text="Pressing the up or down arrow keys will cycle through the most recently used paths."
+                                TextWrapping="Wrap" />
+                        </TeachingTip.Content>
+                        <TeachingTip.IconSource>
+                            <SymbolIconSource Symbol="Edit" />
+                        </TeachingTip.IconSource>
+                    </TeachingTip>
+
+                    <!--  Button swap during backup process  -->
+                    <Grid
+                        Margin="12,5,1,5"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center">
+                        <Button
+                            x:Name="btnBackup"
+                            MinHeight="34"
+                            Padding="15,5,15,5"
+                            Click="btnBackupOnClick"
+                            Content="Backup"
+                            IsEnabled="{x:Bind IsBusy, Mode=OneWay, Converter={StaticResource BooleanInverter}}"
+                            Style="{StaticResource MyButtonStyle}"
+                            ToolTipService.ToolTip="Run a backup"
+                            Visibility="{x:Bind IsBusy, Mode=OneWay, Converter={StaticResource BooleanVisibility}}" />
+                        <Button
+                            x:Name="btnCancel"
+                            MinHeight="34"
+                            Padding="15,5,15,5"
+                            Click="btnCancelOnClick"
+                            Content="Cancel"
+                            IsEnabled="{x:Bind IsBusy, Mode=OneWay}"
+                            Style="{StaticResource MyButtonStyle}"
+                            ToolTipService.ToolTip="Cancel the backup"
+                            Visibility="{x:Bind IsBusy, Mode=OneWay, Converter={StaticResource BooleanVisibilityInverse}}" />
+                    </Grid>
+                    <!--  Progress reporting  -->
+                    <ProgressRing
+                        Margin="20,0,10,0"
+                        VerticalAlignment="Center"
+                        Foreground="{ThemeResource QuinaryBrush}"
+                        Visibility="{x:Bind IsBusy, Mode=OneWay, Converter={StaticResource BooleanVisibility}, ConverterParameter=False}" />
+                    <Grid
+                        MinWidth="200"
+                        Margin="15,2,1,-3"
+                        RowDefinitions="2*,1*"
+                        RowSpacing="1">
+                        <TextBlock
+                            Grid.Row="0"
+                            VerticalAlignment="Bottom"
+                            FontSize="18"
+                            FontWeight="Normal"
+                            Foreground="{ThemeResource QuinaryBrush}"
+                            Text="{x:Bind Progress, Mode=OneWay}"
+                            ToolTipService.ToolTip="Current backup progress" />
+                        <ProgressBar
+                            x:Name="progBar"
+                            Grid.Row="1"
+                            Height="20"
+                            Foreground="{ThemeResource QuinaryBrush}"
+                            Maximum="100"
+                            Minimum="0"
+                            ToolTipService.ToolTip="Current backup progress"
+                            Visibility="{x:Bind IsBusy, Mode=OneWay, Converter={StaticResource BooleanVisibility}, ConverterParameter=False}"
+                            Value="0" />
+                    </Grid>
+                </StackPanel>
+
+                <!--  Background Logo  -->
+                <Image
+                    Grid.Row="3"
+                    Grid.RowSpan="2"
+                    Margin="1"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Opacity="0.1"
+                    Source="/Assets/RepoFolderBig.png" />
+
+                <!--
+                    [===] ListView Not Showing Scrollbar [===]
+                    This issue is that the 3rd RowDefinition is set to Auto.
+                    This means it will grow as big as the contents. Unfortunately,
+                    there's nothing anywhere to then prevent the ListView from growing
+                    indefinitely to host all the items it contains. As the ListView then
+                    becomes as big as all the items it contains, it never needs to show
+                    the scrollbar. This happens even though the listview (and the grid's
+                    3rd row) grows past the bottom of the window. The easiest way to
+                    address this is to set the height of the second RowDefinition to
+                    asterisk which will tell the row to take up all the available space
+                    (in the window) but no more. In turn, this limits the space available
+                    to the ListView and that then will cause the scrollbar to show once
+                    sufficient items are in the list that scrolling becomes necessary.
+                -->
+                <!--  Old style message list  -->
+                <ListView
+                    x:Name="lvMessages"
+                    Grid.Row="3"
+                    Margin="4"
+                    VerticalAlignment="Stretch"
+                    Background="Transparent"
+                    ItemsSource="{x:Bind Messages, Mode=OneWay}"
+                    ScrollViewer.VerticalScrollBarVisibility="Visible"
+                    SelectionMode="Single"
+                    Visibility="Collapsed">
+                    <ListView.Transitions>
+                        <TransitionCollection>
+                            <AddDeleteThemeTransition />
+                        </TransitionCollection>
+                    </ListView.Transitions>
+                    <ListView.ItemContainerStyle>
+                        <Style TargetType="ListViewItem">
+                            <Setter Property="FontFamily" Value="Consolas" />
+                            <Setter Property="FontSize" Value="14" />
+                            <Setter Property="Background" Value="{ThemeResource ListViewItemBackground}" />
+                            <Setter Property="TabNavigation" Value="Local" />
+                            <Setter Property="IsHoldingEnabled" Value="True" />
+                            <Setter Property="Padding" Value="12,0,10,0" />
+                            <Setter Property="HorizontalContentAlignment" Value="Left" />
+                            <Setter Property="VerticalContentAlignment" Value="Center" />
+                            <Setter Property="MinWidth" Value="{ThemeResource ListViewItemMinWidth}" />
+                            <Setter Property="MinHeight" Value="{ThemeResource ListViewItemMinHeight}" />
+                            <Setter Property="AllowDrop" Value="False" />
+                            <Setter Property="UseSystemFocusVisuals" Value="{StaticResource UseSystemFocusVisuals}" />
+                            <Setter Property="FocusVisualMargin" Value="0" />
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="ListViewItem">
+                                        <ListViewItemPresenter
+                                            x:Name="Root"
+                                            HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                            VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"
+                                            CheckBoxBrush="{ThemeResource ListViewItemCheckBoxBrush}"
+                                            CheckBrush="{ThemeResource ListViewItemCheckBrush}"
+                                            CheckMode="{ThemeResource ListViewItemCheckMode}"
+                                            ContentMargin="{TemplateBinding Padding}"
+                                            ContentTransitions="{TemplateBinding ContentTransitions}"
+                                            Control.IsTemplateFocusTarget="True"
+                                            CornerRadius="5"
+                                            DisabledOpacity="{ThemeResource ListViewItemDisabledThemeOpacity}"
+                                            DragBackground="{ThemeResource ListViewItemDragBackground}"
+                                            DragForeground="{ThemeResource ListViewItemDragForeground}"
+                                            DragOpacity="{ThemeResource ListViewItemDragThemeOpacity}"
+                                            FocusBorderBrush="{ThemeResource ListViewItemFocusBorderBrush}"
+                                            FocusSecondaryBorderBrush="{ThemeResource ListViewItemFocusSecondaryBorderBrush}"
+                                            FocusVisualMargin="{TemplateBinding FocusVisualMargin}"
+                                            PlaceholderBackground="{ThemeResource ListViewItemPlaceholderBackground}"
+                                            PointerOverBackground="{ThemeResource ListViewItemBackgroundPointerOver}"
+                                            PointerOverForeground="{ThemeResource ListViewItemForegroundPointerOver}"
+                                            PressedBackground="{ThemeResource ListViewItemBackgroundPressed}"
+                                            ReorderHintOffset="{ThemeResource ListViewItemReorderHintThemeOffset}"
+                                            RevealBackground="{ThemeResource ListViewItemRevealBackground}"
+                                            RevealBorderBrush="{ThemeResource ListViewItemRevealBorderBrush}"
+                                            RevealBorderThickness="{ThemeResource ListViewItemRevealBorderThemeThickness}"
+                                            SelectedBackground="{ThemeResource SelectionBrush}"
+                                            SelectedForeground="{ThemeResource ListViewItemForegroundSelected}"
+                                            SelectedPointerOverBackground="{ThemeResource SelectionBrush}"
+                                            SelectedPressedBackground="{ThemeResource BackgroundBrush}"
+                                            SelectionCheckMarkVisualEnabled="{ThemeResource ListViewItemSelectionCheckMarkVisualEnabled}">
+                                            <ListViewItemPresenter.BackgroundTransition>
+                                                <BrushTransition Duration="0:0:0.29" />
+                                            </ListViewItemPresenter.BackgroundTransition>
+                                            <VisualStateManager.VisualStateGroups>
+                                                <VisualStateGroup x:Name="CommonStates">
+                                                    <VisualState x:Name="Normal">
+                                                        <Storyboard>
+                                                            <ObjectAnimationUsingKeyFrames Storyboard.TargetName="Root" Storyboard.TargetProperty="Background">
+                                                                <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource AccentButtonBackgroundPressed}" />
+                                                            </ObjectAnimationUsingKeyFrames>
+                                                            <ObjectAnimationUsingKeyFrames Storyboard.TargetName="Root" Storyboard.TargetProperty="Foreground">
+                                                                <DiscreteObjectKeyFrame KeyTime="0" Value="White" />
+                                                            </ObjectAnimationUsingKeyFrames>
+                                                        </Storyboard>
+                                                    </VisualState>
+                                                    <VisualState x:Name="Selected">
+                                                        <Storyboard>
+                                                            <ObjectAnimationUsingKeyFrames Storyboard.TargetName="Root" Storyboard.TargetProperty="Background">
+                                                                <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource AccentButtonBackgroundPressed}" />
+                                                            </ObjectAnimationUsingKeyFrames>
+                                                            <ObjectAnimationUsingKeyFrames Storyboard.TargetName="Root" Storyboard.TargetProperty="Foreground">
+                                                                <DiscreteObjectKeyFrame KeyTime="0" Value="WhiteSmoke" />
+                                                            </ObjectAnimationUsingKeyFrames>
+                                                        </Storyboard>
+                                                    </VisualState>
+                                                    <VisualState x:Name="PointerOver">
+                                                        <Storyboard>
+                                                            <ObjectAnimationUsingKeyFrames Storyboard.TargetName="Root" Storyboard.TargetProperty="Background">
+                                                                <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource AccentButtonBackgroundPointerOver}" />
+                                                            </ObjectAnimationUsingKeyFrames>
+                                                            <ObjectAnimationUsingKeyFrames Storyboard.TargetName="Root" Storyboard.TargetProperty="Foreground">
+                                                                <DiscreteObjectKeyFrame KeyTime="0" Value="SpringGreen" />
+                                                            </ObjectAnimationUsingKeyFrames>
+                                                        </Storyboard>
+                                                    </VisualState>
+                                                    <VisualState x:Name="PointerOverSelected">
+                                                        <Storyboard>
+                                                            <ObjectAnimationUsingKeyFrames Storyboard.TargetName="Root" Storyboard.TargetProperty="Background">
+                                                                <DiscreteObjectKeyFrame KeyTime="0" Value="Violet" />
+                                                            </ObjectAnimationUsingKeyFrames>
+                                                            <ObjectAnimationUsingKeyFrames Storyboard.TargetName="Root" Storyboard.TargetProperty="Foreground">
+                                                                <DiscreteObjectKeyFrame KeyTime="0" Value="SkyBlue" />
+                                                            </ObjectAnimationUsingKeyFrames>
+                                                        </Storyboard>
+                                                    </VisualState>
+                                                    <VisualState x:Name="PointerOverPressed" />
+                                                    <VisualState x:Name="Pressed">
+                                                        <Storyboard>
+                                                            <ObjectAnimationUsingKeyFrames Storyboard.TargetName="Root" Storyboard.TargetProperty="Background">
+                                                                <DiscreteObjectKeyFrame KeyTime="0" Value="WhiteSmoke" />
+                                                            </ObjectAnimationUsingKeyFrames>
+                                                            <ObjectAnimationUsingKeyFrames Storyboard.TargetName="Root" Storyboard.TargetProperty="Foreground">
+                                                                <DiscreteObjectKeyFrame KeyTime="0" Value="Black" />
+                                                            </ObjectAnimationUsingKeyFrames>
+                                                        </Storyboard>
+                                                    </VisualState>
+                                                    <VisualState x:Name="PressedSelected" />
+                                                </VisualStateGroup>
+                                                <VisualStateGroup x:Name="DisabledStates">
+                                                    <VisualState x:Name="Enabled" />
+                                                    <VisualState x:Name="Disabled">
+                                                        <Storyboard>
+                                                            <ObjectAnimationUsingKeyFrames Storyboard.TargetName="Root" Storyboard.TargetProperty="Background">
+                                                                <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource AccentButtonBackgroundDisabled}" />
+                                                            </ObjectAnimationUsingKeyFrames>
+                                                            <ObjectAnimationUsingKeyFrames Storyboard.TargetName="Root" Storyboard.TargetProperty="Foreground">
+                                                                <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource AccentButtonForegroundDisabled}" />
+                                                            </ObjectAnimationUsingKeyFrames>
+                                                        </Storyboard>
+                                                    </VisualState>
+                                                </VisualStateGroup>
+                                            </VisualStateManager.VisualStateGroups>
+                                        </ListViewItemPresenter>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </ListView.ItemContainerStyle>
+                </ListView>
+
+                <!--  New style message list  -->
+                <Grid
+                    x:Name="LogViewGrid"
+                    Grid.Row="3"
+                    Padding="8"
+                    Background="Transparent"
+                    RowDefinitions="Auto,*">
+                    <!--  Log Viewer Resources  -->
+                    <Grid.Resources>
+                        <GridLength x:Key="TimestampColumnWidth">170</GridLength>
+                        <GridLength x:Key="LevelColumnWidth">80</GridLength>
+                        <!--  Styles  -->
+                        <Style x:Key="ColumnHeaderBorderStyle" TargetType="Border">
+                            <Setter Property="Background" Value="Transparent" />
+                            <Setter Property="Padding" Value="0,0,10,0" />
+                            <Setter Property="BorderThickness" Value="0,0,0,1" />
+                            <Setter Property="BorderBrush" Value="{StaticResource HeaderBrush}" />
+                            <Setter Property="Margin" Value="2,1" />
+                        </Style>
+                        <Style x:Key="ColumnHeaderTextBlockStyle" TargetType="TextBlock">
+                            <Setter Property="FontWeight" Value="Bold" />
+                            <Setter Property="FontFamily" Value="Segoe" />
+                            <Setter Property="FontSize" Value="15" />
+                        </Style>
+                        <Style x:Key="LogElementTextBlockStyle" TargetType="TextBlock">
+                            <Setter Property="Padding" Value="0,0,10,0" />
+                            <Setter Property="FontSize" Value="13" />
+                            <Setter Property="FontFamily" Value="Consolas" />
+                            <Setter Property="Margin" Value="2,1" />
+                            <Setter Property="HorizontalAlignment" Value="Left" />
+                        </Style>
+                    </Grid.Resources>
+                    <!--  Column Headers  -->
+                    <Grid Grid.Row="0">
+                        <Grid.Resources>
+                            <Style BasedOn="{StaticResource ColumnHeaderBorderStyle}" TargetType="Border" />
+                            <Style BasedOn="{StaticResource ColumnHeaderTextBlockStyle}" TargetType="TextBlock" />
+                        </Grid.Resources>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="{StaticResource TimestampColumnWidth}" />
+                            <ColumnDefinition Width="{StaticResource LevelColumnWidth}" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <!--  Number Column Header  -->
+                        <Border Grid.Column="0">
+                            <TextBlock Foreground="{ThemeResource HeaderBrush}" Text="Time" />
+                        </Border>
+                        <Border Grid.Column="1">
+                            <TextBlock Foreground="{ThemeResource HeaderBrush}" Text="Level" />
+                        </Border>
+                        <Border Grid.Column="2">
+                            <TextBlock Foreground="{ThemeResource HeaderBrush}" Text="Message" />
+                        </Border>
+                    </Grid>
+                    <!--  Log Data  -->
+                    <ScrollViewer x:Name="LogScrollViewer" Grid.Row="1">
+                        <ItemsRepeater x:Name="LogItemsRepeater" ItemsSource="{x:Bind LogMessages}">
+                            <ItemsRepeater.ItemTemplate>
+                                <DataTemplate x:DataType="model:LogEntry">
+                                    <Grid>
+                                        <Grid.ChildrenTransitions>
+                                            <TransitionCollection>
+                                                <AddDeleteThemeTransition />
+                                            </TransitionCollection>
+                                        </Grid.ChildrenTransitions>
+                                        <Grid.Resources>
+                                            <Style BasedOn="{StaticResource LogElementTextBlockStyle}" TargetType="TextBlock" />
+                                        </Grid.Resources>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="{StaticResource TimestampColumnWidth}" />
+                                            <ColumnDefinition Width="{StaticResource LevelColumnWidth}" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <!--  Timestamp Element  -->
+                                        <TextBlock
+                                            Grid.Column="0"
+                                            Foreground="{ThemeResource PrimaryBrush}"
+                                            Text="{x:Bind Time, Converter={StaticResource StringToFormat}, ConverterParameter='{}{0:hh:mm:ss.fff tt (ddd)}'}" />
+                                        <!--  Level Element  -->
+                                        <StackPanel
+                                            Grid.Column="1"
+                                            Margin="1,1,1,1"
+                                            Padding="1,0,1,0"
+                                            Background="{x:Bind Severity, Mode=OneWay, Converter={StaticResource LevelToBackground}}"
+                                            CornerRadius="3">
+                                            <!--
+                                                Sadly, the TextBlock control does not expose a Background property, hence the parental StackPanel.
+                                            -->
+                                            <TextBlock Foreground="{x:Bind Severity, Mode=OneWay, Converter={StaticResource LevelToBrush}}" Text="{x:Bind Severity}" />
+                                        </StackPanel>
+                                        <!--  Message Element  -->
+                                        <TextBlock
+                                            Grid.Column="2"
+                                            Foreground="{ThemeResource PrimaryBrush}"
+                                            Text="{x:Bind Message}" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsRepeater.ItemTemplate>
+                        </ItemsRepeater>
+                    </ScrollViewer>
+                </Grid>
+
+                <!--  Status Bar  -->
+                <InfoBar
+                    x:Name="infoBar"
+                    Grid.Row="4"
+                    Margin="1,10,12,9"
+                    VerticalAlignment="Bottom">
+                    <InfoBar.ActionButton>
+                        <DropDownButton HorizontalAlignment="Right" VerticalAlignment="Center">
+                            <TextBlock
+                                FontFamily="Segoe MDL2 Assets"
+                                FontSize="14"
+                                Text="&#xE700;" />
+                            <DropDownButton.Flyout>
+                                <MenuFlyout x:Name="flyout" Placement="BottomEdgeAlignedLeft">
+                                    <!--
+                                        Unfortunately WinUI3 binding does not support any kind
+                                        of ancestor discovery, so I'm messing around here with
+                                        different binding approaches. We could also create a
+                                        DependencyProperty for the CommandParameter itself.
+                                        https://stackoverflow.com/questions/75139620/how-to-pass-commands-across-different-xaml-files-controls
+                                        https://learn.microsoft.com/en-us/windows/uwp/data-binding/data-binding-in-depth
+                                        {Binding} is more flexible but less performant).
+                                        {x:Bind} is more performant but less flexible).
+                                    -->
+                                    <MenuFlyoutItem
+                                        x:Name="mfiOpenAbout"
+                                        Command="{x:Bind OpenAboutCommand}"
+                                        CommandParameter="{Binding RelativeSource={RelativeSource Mode=Self}, Mode=OneWay}"
+                                        Text="Show assemblies">
+                                        <MenuFlyoutItem.Icon>
+                                            <FontIcon Glyph="&#xE7EE;" />
+                                        </MenuFlyoutItem.Icon>
+                                    </MenuFlyoutItem>
+                                    <MenuFlyoutItem
+                                        x:Name="mfiOpenLog"
+                                        Command="{x:Bind OpenLogFileCommand}"
+                                        CommandParameter="{x:Bind infoBar.Message, FallbackValue='empty', Mode=OneWay}"
+                                        Text="Open log file">
+                                        <MenuFlyoutItem.Icon>
+                                            <FontIcon Glyph="&#xED25;" />
+                                        </MenuFlyoutItem.Icon>
+                                    </MenuFlyoutItem>
+                                    <!--  This has not been implemented yet.  -->
+                                    <MenuFlyoutItem
+                                        x:Name="mfiIgnore"
+                                        Command="{x:Bind TestingCommand}"
+                                        CommandParameter="{x:Bind (x:Int32)progBar.Value, FallbackValue='0', Mode=OneWay}"
+                                        Text="Ignore warnings">
+                                        <MenuFlyoutItem.Icon>
+                                            <FontIcon Glyph="&#xE7BA;" />
+                                        </MenuFlyoutItem.Icon>
+                                    </MenuFlyoutItem>
+                                    <!--  This has not been implemented yet.  -->
+                                    <MenuFlyoutItem
+                                        x:Name="mfiDisable"
+                                        Command="{x:Bind TestingCommand}"
+                                        CommandParameter="{x:Bind ((SolidColorBrush)Foreground).Color, FallbackValue='fallback value', Mode=OneWay}"
+                                        Text="Disable info bar">
+                                        <MenuFlyoutItem.Icon>
+                                            <FontIcon Glyph="&#xEE79;" />
+                                        </MenuFlyoutItem.Icon>
+                                    </MenuFlyoutItem>
+                                </MenuFlyout>
+                            </DropDownButton.Flyout>
+                        </DropDownButton>
+                    </InfoBar.ActionButton>
+                </InfoBar>
+            </Grid>
+
+        </SplitView>
+
+        <!--  Referenced Assemblies Dialog  -->
+        <ContentDialog
+            x:Name="contentDialog"
+            Width="450"
+            CloseButtonText="OK">
+            <!--  Title Style  -->
+            <ContentDialog.TitleTemplate>
+                <DataTemplate>
+                    <StackPanel Orientation="Horizontal">
+                        <Image
+                            Height="50"
+                            Shadow="{ThemeResource CommandBarFlyoutOverflowShadow}"
+                            Source="/Assets/Searcher.png" />
+                        <TextBlock
+                            Margin="9,0"
+                            VerticalAlignment="Center"
+                            Shadow="{ThemeResource CommandBarFlyoutOverflowShadow}"
+                            Text="Referenced Modules" />
+                    </StackPanel>
+                </DataTemplate>
+            </ContentDialog.TitleTemplate>
+            <!--  Button Style  -->
+            <ContentDialog.CloseButtonStyle>
+                <Style TargetType="Button">
+                    <!-- <Setter Property="Background" Value="{ThemeResource SecondaryBrush}" /> -->
+                    <Setter Property="CornerRadius" Value="4" />
+                </Style>
+            </ContentDialog.CloseButtonStyle>
+            <ScrollViewer MaxHeight="300">
+                <TextBlock x:Name="tbAssemblies" TextWrapping="WrapWholeWords" />
+            </ScrollViewer>
+        </ContentDialog>
+
+    </Grid>
+
+</UserControl>
