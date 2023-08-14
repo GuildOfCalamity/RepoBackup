@@ -61,8 +61,8 @@
     
     <!-- 
     ** We'll set the props in the AssemblyInfo file, since we've stated that we want to generate an assembly info file. **
-    <Company>ICS</Company>
-    <Authors>Steve Chamlee</Authors>
+    <Company>GuildOfCalamity</Company>
+    <Authors>Me</Authors>
     <Product>RepoBackup</Product>
     <Description>A source repository backup utility.</Description>
     <Version>1.0.0.5</Version>
