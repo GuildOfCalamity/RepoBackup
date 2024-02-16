@@ -15,6 +15,7 @@ public class IsEnabledTextBlock : Control
         this.DefaultStyleKey = typeof(IsEnabledTextBlock);
     }
 
+    /// <inheritdoc />
     protected override void OnApplyTemplate()
     {
         IsEnabledChanged -= IsEnabledTextBlock_IsEnabledChanged;

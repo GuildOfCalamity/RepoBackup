@@ -12,6 +12,7 @@ public class Settings
     public bool ExplorerShell { get; set; }
     public bool FullInitialBackup { get; set; }
     public bool AtWork { get; set; }
+    public bool RandomBackdrop { get; set; }
     public int ThreadIndex { get; set; }
     public int StaleIndex { get; set; }
     public Settings() { }

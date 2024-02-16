@@ -43,6 +43,7 @@ public class CheckBoxWithDescriptionControl : CheckBox
         this.Loaded += CheckBoxSubTextControl_Loaded;
     }
 
+    /// <inheritdoc />
     protected override void OnApplyTemplate()
     {
         Update();
