@@ -5,7 +5,7 @@
     },
     "WinUIDemo (Unpackaged)": {
       "commandName": "Project",
-      "commandLineArgs": "-mode testing"
+      "commandLineArgs": "-mode normal"
     }
   }
 }

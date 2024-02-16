@@ -14,30 +14,32 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Net.Http;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Runtime.InteropServices.WindowsRuntime;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Xml;
 using System.Xml.Linq;
+
 using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Data;
 using Microsoft.UI.Xaml.Hosting;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Imaging;
 using Microsoft.UI.Xaml.Shapes;
+
 using Windows.Graphics.Imaging;
 using Windows.Storage;
 using Windows.Storage.Streams;
 
 using Path = System.IO.Path;
-
-using WinUIDemo.Views;
-
 
 namespace WinUIDemo;
 
@@ -46,8 +48,23 @@ namespace WinUIDemo;
 /// </summary>
 public static class Extensions
 {
-
     #region [Miscellaneous]
+    /// <summary>
+    /// I created this to show what controls are members of <see cref="Microsoft.UI.Xaml.FrameworkElement"/>.
+    /// </summary>
+    public static void FindControlsInheritingFromFrameworkElement()
+    {
+        var controlAssembly = typeof(Microsoft.UI.Xaml.Controls.Control).GetTypeInfo().Assembly;
+        var controlTypes = controlAssembly.GetTypes()
+            .Where(type => type.Namespace == "Microsoft.UI.Xaml.Controls" &&
+            typeof(Microsoft.UI.Xaml.FrameworkElement).IsAssignableFrom(type));
+
+        foreach (var controlType in controlTypes)
+        {
+            Debug.WriteLine($"[FrameworkElement] {controlType.FullName}");
+        }
+    }
+
     /// <summary>
     /// Over-engineered version of Thread.Sleep().
     /// During the WaitOne call we do not care about receiving a signal.
@@ -729,7 +746,27 @@ public static class Extensions
     #endregion
 
     #region [WinUI]
-    public static string? GetBindingPropertyName(this Binding binding)
+    public static bool IsMonospacedFont(FontFamily font)
+    {
+        var tb1 = new TextBlock { Text = "(!aiZ%#BIm,. ~`", FontFamily = font };
+        tb1.Measure(new Windows.Foundation.Size(Double.PositiveInfinity, Double.PositiveInfinity));
+        var tb2 = new TextBlock { Text = "...............", FontFamily = font };
+        tb2.Measure(new Windows.Foundation.Size(Double.PositiveInfinity, Double.PositiveInfinity));
+        var off = Math.Abs(tb1.DesiredSize.Width - tb2.DesiredSize.Width);
+        return off < 0.01;
+    }
+
+    public static Windows.Foundation.Size GetTextSize(FontFamily font, double fontSize, string text)
+    {
+        var tb = new TextBlock { Text = text, FontFamily = font, FontSize = fontSize };
+        tb.Measure(new Windows.Foundation.Size(Double.PositiveInfinity, Double.PositiveInfinity));
+        return tb.DesiredSize;
+    }
+
+    /// <summary>
+    /// Returns the <see cref="Microsoft.UI.Xaml.PropertyPath"/> based on the provided <see cref="Microsoft.UI.Xaml.Data.Binding"/>.
+    /// </summary>
+    public static string? GetBindingPropertyName(this Microsoft.UI.Xaml.Data.Binding binding)
     {
         return binding?.Path?.Path?.Split('.')?.LastOrDefault();
     }
@@ -811,6 +848,57 @@ public static class Extensions
         }
 
         return result;
+    }
+
+    public static FontIcon GenerateFontIcon(Windows.UI.Color brush, string glyph = "\uF127", int width = 10, int height = 10)
+    {
+        return new FontIcon()
+        {
+            Glyph = glyph,
+            FontSize = 1.5,
+            Width = (double)width,
+            Height = (double)height,
+            Foreground = new SolidColorBrush(brush),
+        };
+    }
+
+    public static async Task<byte[]> AsPng(this UIElement control)
+    {
+        // Get XAML Visual in BGRA8 format
+        var rtb = new RenderTargetBitmap();
+        await rtb.RenderAsync(control, (int)control.ActualSize.X, (int)control.ActualSize.Y);
+
+        // Encode as PNG
+        var pixelBuffer = (await rtb.GetPixelsAsync()).ToArray();
+        IRandomAccessStream mraStream = new InMemoryRandomAccessStream();
+        var encoder = await BitmapEncoder.CreateAsync(BitmapEncoder.PngEncoderId, mraStream);
+        encoder.SetPixelData(
+            BitmapPixelFormat.Bgra8,
+            BitmapAlphaMode.Premultiplied,
+            (uint)rtb.PixelWidth,
+            (uint)rtb.PixelHeight,
+            184,
+            184,
+            pixelBuffer);
+        await encoder.FlushAsync();
+
+        // Transform to byte array
+        var bytes = new byte[mraStream.Size];
+        await mraStream.ReadAsync(bytes.AsBuffer(), (uint)mraStream.Size, InputStreamOptions.None);
+
+        return bytes;
+    }
+
+    /// <summary>
+    /// This is a redundant call from App.xaml.cs, but is here if you need it.
+    /// </summary>
+    /// <param name="window"><see cref="Microsoft.UI.Xaml.Window"/></param>
+    /// <returns><see cref="Microsoft.UI.Windowing.AppWindow"/></returns>
+    public static Microsoft.UI.Windowing.AppWindow GetAppWindow(this Microsoft.UI.Xaml.Window window)
+    {
+        System.IntPtr hWnd = WinRT.Interop.WindowNative.GetWindowHandle(window);
+        Microsoft.UI.WindowId wndId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hWnd);
+        return Microsoft.UI.Windowing.AppWindow.GetFromWindowId(wndId);
     }
 
     /// <summary>
@@ -973,12 +1061,45 @@ public static class Extensions
     }
 
     /// <summary>
-    /// Creates a Color from the hex color code and returns the result 
-    /// as a <see cref="Microsoft.UI.Xaml.Media.SolidColorBrush"/>.
+    /// Returns a random selection from <see cref="Microsoft.UI.Colors"/>.
     /// </summary>
-    /// <param name="hexColorCode">text representation of the color</param>
-    /// <returns><see cref="Microsoft.UI.Xaml.Media.SolidColorBrush"/></returns>
-    public static Microsoft.UI.Xaml.Media.SolidColorBrush? GetBrushFromHexString(string hexColorCode)
+    /// <returns><see cref="Windows.UI.Color"/></returns>
+	public static Windows.UI.Color GetRandomMicrosoftUIColor()
+	{
+		try
+		{
+			var colorType = typeof(Microsoft.UI.Colors);
+			var colors = colorType.GetProperties()
+				.Where(p => p.PropertyType == typeof(Windows.UI.Color) && p.GetMethod.IsStatic && p.GetMethod.IsPublic)
+				.Select(p => (Windows.UI.Color)p.GetValue(null))
+				.ToList();
+
+		    if (colors.Count > 0)
+            {
+                var randomIndex = Random.Shared.Next(colors.Count);
+                var randomColor = colors[randomIndex];
+                return randomColor;
+            }
+            else
+            {
+                return Microsoft.UI.Colors.Gray;
+            }
+	    }
+		catch (Exception ex)
+		{
+			Debug.WriteLine($"GetRandomColor: {ex.Message}");
+			return Microsoft.UI.Colors.Red;
+		}
+	}
+
+
+	/// <summary>
+	/// Creates a Color from the hex color code and returns the result 
+	/// as a <see cref="Microsoft.UI.Xaml.Media.SolidColorBrush"/>.
+	/// </summary>
+	/// <param name="hexColorCode">text representation of the color</param>
+	/// <returns><see cref="Microsoft.UI.Xaml.Media.SolidColorBrush"/></returns>
+	public static Microsoft.UI.Xaml.Media.SolidColorBrush? GetBrushFromHexString(string hexColorCode)
     {
         if (string.IsNullOrEmpty(hexColorCode))
             return null;
@@ -1966,6 +2087,25 @@ public static class Extensions
         for (int i = 0; i < locations.Count; i += nSize)
         {
             yield return locations.GetRange(i, Math.Min(nSize, locations.Count - i));
+        }
+    }
+
+    /// <summary>
+    /// Weave two <see cref="IEnumerable{T}"/>s together while alternating elements.
+    /// </summary>
+    /// <typeparam name="T"></typeparam>
+    /// <param name="first"></param>
+    /// <param name="second"></param>
+    /// <returns>Woven <see cref="IEnumerable{T}"/></returns>
+    public static IEnumerable<T> InterleaveSequenceWith<T>(this IEnumerable<T> first, IEnumerable<T> second)
+    {
+        var firstIter = first.GetEnumerator();
+        var secondIter = second.GetEnumerator();
+
+        while (firstIter.MoveNext() && secondIter.MoveNext())
+        {
+            yield return firstIter.Current;
+            yield return secondIter.Current;
         }
     }
 
@@ -2961,6 +3101,32 @@ public static class Extensions
     }
 
     /// <summary>
+    /// Returns the specified occurrence of a character in a string.
+    /// </summary>
+    /// <returns>
+    /// Index of requested occurrence if successful, -1 otherwise.
+    /// </returns>
+    /// <example>
+    /// If you wanted to find the second index of the percent character in a string:
+    /// int index = "blah%blah%blah".IndexOfNth('%', 2);
+    /// </example>
+    public static int IndexOfNth(this string input, char character, int position)
+    {
+        int index = -1;
+        
+        if (string.IsNullOrEmpty(input))
+            return index;
+
+        for (int i = 0; i < position; i++)
+        {
+            index = input.IndexOf(character, index + 1);
+            if (index == -1) { break; }
+        }
+
+        return index;
+    }
+
+    /// <summary>
     /// Attempts to convert a string into a decimal utilizing IFormatProvider and considering currency symbols.
     /// </summary>
     public static decimal ToDecimal(this string value, decimal defaultValue)
@@ -3609,6 +3775,9 @@ public static class Extensions
     #endregion
 
     #region [Files and Folders]
+    // https://stackoverflow.com/questions/62771/how-do-i-check-if-a-given-string-is-a-legal-valid-file-name-under-windows
+    public static readonly Regex ValidWindowsFileNames = new Regex(@"^(?!(?:PRN|AUX|CLOCK\$|NUL|CON|COM\d|LPT\d)(?:\..+)?$)[^\x00-\x1F\xA5\\?*:\"";|\/<>]+(?<![\s.])$", RegexOptions.IgnoreCase);
+
     /// <summary>
     /// Returns the AppData path including the submodule.
     /// e.g. "C:\Users\UserName\AppData\Local\RepoBackup\Settings"
@@ -3965,6 +4134,33 @@ public static class Extensions
         return results;
     }
 
+    public static Dictionary<string, string?>? GetFieldValues(this object obj)
+    {
+        Dictionary<string, string?>? results = new();
+
+        try
+        {
+            results = obj.GetType()
+                .GetFields(BindingFlags.Public | BindingFlags.Static)
+                .Where(f => f.FieldType == typeof(string))
+                .ToDictionary(f => f.Name, f => (string)f.GetValue(null));
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"GetFieldValues: {ex.Message}");
+        }
+
+        return results;
+    }
+
+    public static string GetFileExtension(string fileName)
+    {
+        if (string.IsNullOrEmpty(fileName) || !fileName.Contains("."))
+            return string.Empty;
+
+        return fileName.Split(".").Last();
+    }
+
     /// <summary>
     /// Brute force alpha removal of <see cref="Version"/> text
     /// is not always the best approach, e.g. the following:
@@ -3981,14 +4177,14 @@ public static class Extensions
         {
             var ver = FileVersionInfo.GetVersionInfo(fullPath).FileVersion;
             if (string.IsNullOrEmpty(ver)) { return new Version(); }
-            string cleanVersion = Regex.Replace(ver, "[^.0-9]", "");
             if (ver.HasSpace())
             {   // Some assemblies contain versions such as "10.0.22622.1030 (WinBuild.160101.0800)"
                 // This will cause the Version constructor to throw an exception, so just take the first piece.
                 var chunk = ver.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                var firstPiece = Regex.Replace(chunk[0], "[^.0-9]", "");
+                var firstPiece = Regex.Replace(chunk[0].Replace(',','.'), "[^.0-9]", "");
                 return new Version(firstPiece);
             }
+            string cleanVersion = Regex.Replace(ver, "[^.0-9]", "");
             return new Version(cleanVersion);
         }
         catch (Exception)
@@ -4009,6 +4205,39 @@ public static class Extensions
         foreach (var f in Directory.GetFiles(path, ext, searchOption))
         {
             yield return new FileInfo(f);
+        }
+    }
+
+    /// <summary>
+    /// IEnumerable file list using recursion.
+    /// </summary>
+    /// <param name="basePath">root folder to search</param>
+    /// <returns><see cref="IEnumerable{T}"/></returns>
+    public static IEnumerable<string> GetAllFilesUnder(string basePath)
+    {
+        foreach (var file in Directory.GetFiles(basePath))
+            yield return file;
+
+        foreach (var x in Directory.GetDirectories(basePath).Select(GetAllFilesUnder).SelectMany(files => files))
+            yield return x;
+    }
+
+    /// <summary>
+    /// Returns the number of lines in a file, excluding the empty lines.
+    /// </summary>
+    /// <param name="filePath">full path to file</param>
+    /// <returns>line count</returns>
+    public static int CountFileLines(string filePath)
+    {
+        return File.ReadLines(filePath).Count(LocalPredicate);
+
+        // We can add more logic here to customize the filtering.
+        bool LocalPredicate(string line)
+        {
+            if (string.IsNullOrEmpty(line))
+                return false;
+
+            return true;
         }
     }
 
@@ -4372,6 +4601,79 @@ public static class Extensions
     public static string ToJsonFriendlyFormat(this DateTime dateTime)
     {
         return dateTime.ToString("yyyy-MM-ddTHH:mm:ssZ");
+    }
+
+    /// <summary>
+    /// 1/1/2023 7:00:00 AM Local to a DateTimeOffset value of 1/1/2023 7:00:00 AM -07:00
+    /// </summary>
+    /// <param name="dateTime"><see cref="DateTime"/></param>
+    /// <returns><see cref="DateTimeOffset"/></returns>
+    public static DateTimeOffset ToLocalTimeOffset(this DateTime dateTime)
+    {
+        dateTime = DateTime.SpecifyKind(dateTime, DateTimeKind.Local);
+        DateTimeOffset localTime = dateTime;
+        return localTime;
+    }
+
+    /// <summary>
+    /// 1/1/2023 7:00:00 AM Utc to a DateTimeOffset value of 1/1/2023 7:00:00 AM +00:00
+    /// </summary>
+    /// <param name="dateTime"><see cref="DateTime"/></param>
+    /// <returns><see cref="DateTimeOffset"/></returns>
+    public static DateTimeOffset ToDateTimeOffset(this DateTime dateTime)
+    {
+        dateTime = DateTime.SpecifyKind(dateTime, DateTimeKind.Utc);
+        DateTimeOffset utcTime = dateTime;
+        return utcTime;
+    }
+
+    /// <summary>
+    /// 1/1/2023 7:00:00 AM Unspecified to a DateTime value of 1/1/2023 7:00:00 AM -05:00
+    /// </summary>
+    /// <param name="dateTime"><see cref="DateTime"/></param>
+    /// <param name="timeZone"></param>
+    /// <returns><see cref="DateTimeOffset"/></returns>
+    public static DateTimeOffset ToDateTimeOffset(this DateTime dateTime, string timeZone = "Eastern Standard Time")
+    {
+        try
+        {
+            DateTimeOffset dto = new DateTimeOffset(dateTime, TimeZoneInfo.FindSystemTimeZoneById(timeZone).GetUtcOffset(dateTime));
+            Console.WriteLine("Converted {0} {1} to a DateTime value of {2}", dateTime, dateTime.Kind, dto);
+            return dto;
+        }
+        catch (TimeZoneNotFoundException) // Handle exception if time zone is not defined in registry
+        {
+            Debug.WriteLine("Unable to identify target time zone for conversion.", $"{nameof(Extensions)}");
+            return ToDateTimeOffset(dateTime);
+        }
+    }
+
+    /// <summary>
+    /// Convert time to local UTC DateTimeOffset value
+    /// </summary>
+    /// <param name="dateTime"><see cref="DateTime"/></param>
+    /// <returns><see cref="DateTimeOffset"/></returns>
+    public static DateTimeOffset ToLocalDateTimeOffset(this DateTime dateTime)
+    {
+        return new DateTimeOffset(dateTime, TimeZoneInfo.Local.GetUtcOffset(dateTime));
+    }
+
+    /// <summary>
+    /// Converts DateTimeOffset values to DateTime values.
+    /// Based on its offset, it determines whether the DateTimeOffset 
+    /// value is a UTC time, a local time, or some other time and defines 
+    /// the returned date and time value's Kind property accordingly.
+    /// </summary>
+    /// <param name="dateTime"><see cref="DateTimeOffset"/></param>
+    /// <returns><see cref="DateTime"/></returns>
+    public static DateTime ToDateTime(this DateTimeOffset dateTime)
+    {
+        if (dateTime.Offset.Equals(TimeSpan.Zero))
+            return dateTime.UtcDateTime;
+        else if (dateTime.Offset.Equals(TimeZoneInfo.Local.GetUtcOffset(dateTime.DateTime)))
+            return DateTime.SpecifyKind(dateTime.DateTime, DateTimeKind.Local);
+        else
+            return dateTime.DateTime;
     }
 
     /// <summary>
@@ -4848,9 +5150,244 @@ public static class Extensions
         else { return null; }
     }
     #endregion
+
+    #region [Web]
+    public static async Task<MemoryStream> GetStreamFromWeb(this string url)
+    {
+        using (var ms = new MemoryStream())
+        {
+            var webReq = (HttpWebRequest)WebRequest.Create(url);
+            webReq.Method = "GET";
+            using (var response = (HttpWebResponse)await webReq.GetResponseAsync())
+            {
+                response.GetResponseStream()?.CopyTo(ms);
+                return ms;
+            }
+        }
+    }
+
+    public static async Task<T?> ReadAsJsonAsync<T>(this HttpContent content)
+    {
+        var json = await content.ReadAsStringAsync();
+
+        if (!string.IsNullOrEmpty(json))
+            return System.Text.Json.JsonSerializer.Deserialize<T>(json, new System.Text.Json.JsonSerializerOptions { DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull });
+        else
+            return default(T);
+    }
+
+    public static async Task<string> DownloadAllAsync(IEnumerable<string> locations)
+    {
+        using (var client = new HttpClient())
+        {
+            var downloads = locations.Select(client.GetStringAsync);
+            var downloadTasks = downloads.ToArray();
+            var pages = await Task.WhenAll(downloadTasks);
+            return string.Concat(pages);
+        }
+    }
+
+    public static bool IsPortAvailableForListening(int portNumber)
+    {
+        System.Net.IPEndPoint[] activeTcpListeners = System.Net.NetworkInformation.IPGlobalProperties.GetIPGlobalProperties().GetActiveTcpListeners();
+        return activeTcpListeners.Select(x => x.Port == portNumber).FirstOrDefault();
+    }
+    #endregion
+
+    #region [WriteableBitmap]
+    public static async Task SaveAsync(this WriteableBitmap writeableBitmap, StorageFile outputFile)
+    {
+        var encoderId = GetEncoderId(outputFile.Name);
+
+        try
+        {
+            Stream stream = writeableBitmap.PixelBuffer.AsStream();
+            byte[] pixels = new byte[(uint)stream.Length];
+            await stream.ReadAsync(pixels, 0, pixels.Length);
+
+            using (var writeStream = await outputFile.OpenAsync(FileAccessMode.ReadWrite))
+            {
+                var encoder = await BitmapEncoder.CreateAsync(encoderId, writeStream);
+                encoder.SetPixelData(
+                    BitmapPixelFormat.Bgra8,
+                    BitmapAlphaMode.Premultiplied,
+                    (uint)writeableBitmap.PixelWidth,
+                    (uint)writeableBitmap.PixelHeight,
+                    96,
+                    96,
+                    pixels);
+
+                await encoder.FlushAsync();
+
+                using (var outputStream = writeStream.GetOutputStreamAt(0))
+                {
+                    await outputStream.FlushAsync();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            // Your exception handling here..
+            throw;
+        }
+    }
+
+    public static async Task<WriteableBitmap> LoadAsync(this WriteableBitmap writeableBitmap, StorageFile storageFile)
+    {
+        var wb = writeableBitmap;
+
+        using (var stream = await storageFile.OpenReadAsync())
+        {
+            await wb.SetSourceAsync(stream);
+        }
+
+        return wb;
+    }
+
+    static Guid GetEncoderId(string fileName)
+    {
+        Guid encoderId;
+
+        var ext = Path.GetExtension(fileName);
+
+        if (new[] { ".bmp", ".dib" }.Contains(ext))
+            encoderId = BitmapEncoder.BmpEncoderId;
+        else if (new[] { ".tiff", ".tif" }.Contains(ext))
+            encoderId = BitmapEncoder.TiffEncoderId;
+        else if (new[] { ".gif" }.Contains(ext))
+            encoderId = BitmapEncoder.GifEncoderId;
+        else if (new[] { ".jpg", ".jpeg", ".jpe", ".jfif", ".jif" }.Contains(ext))
+            encoderId = BitmapEncoder.JpegEncoderId;
+        else if (new[] { ".hdp", ".jxr", ".wdp" }.Contains(ext))
+            encoderId = BitmapEncoder.JpegXREncoderId;
+        else //if (new [] {".png"}.Contains(ext))
+            encoderId = BitmapEncoder.PngEncoderId;
+
+        return encoderId;
+    }
+    #endregion
+
+    #region [CropBitmap]
+    /// <summary>
+    /// Get a cropped bitmap from a image file.
+    /// </summary>
+    /// <param name="originalImageFile">
+    /// The original image file.
+    /// </param>
+    /// <param name="startPoint">
+    /// The start point of the region to be cropped.
+    /// </param>
+    /// <param name="corpSize">
+    /// The size of the region to be cropped.
+    /// </param>
+    /// <returns>
+    /// The cropped image.
+    /// </returns>
+    public async static Task<WriteableBitmap> GetCroppedBitmapAsync(StorageFile originalImageFile,
+        Windows.Foundation.Point startPoint,
+        Windows.Foundation.Size corpSize,
+        double scale)
+    {
+        if (double.IsNaN(scale) || double.IsInfinity(scale))
+            scale = 1;
+
+        // Convert start point and size to integer.
+        uint startPointX = (uint)Math.Floor(startPoint.X * scale);
+        uint startPointY = (uint)Math.Floor(startPoint.Y * scale);
+        uint height = (uint)Math.Floor(corpSize.Height * scale);
+        uint width = (uint)Math.Floor(corpSize.Width * scale);
+
+        using (IRandomAccessStream stream = await originalImageFile.OpenReadAsync())
+        {
+
+            // Create a decoder from the stream. With the decoder, we can get 
+            // the properties of the image.
+            BitmapDecoder decoder = await BitmapDecoder.CreateAsync(stream);
+
+            // The scaledSize of original image.
+            uint scaledWidth = (uint)Math.Floor(decoder.PixelWidth * scale);
+            uint scaledHeight = (uint)Math.Floor(decoder.PixelHeight * scale);
+
+
+            // Refine the start point and the size. 
+            if (startPointX + width > scaledWidth)
+                startPointX = scaledWidth - width;
+
+            if (startPointY + height > scaledHeight)
+                startPointY = scaledHeight - height;
+
+            // Get the cropped pixels.
+            byte[] pixels = await GetPixelData(decoder,
+                startPointX, startPointY,
+                width, height,
+                scaledWidth, scaledHeight);
+
+            // Stream the bytes into a WriteableBitmap
+            WriteableBitmap cropBmp = new WriteableBitmap((int)width, (int)height);
+            Stream pixStream = cropBmp.PixelBuffer.AsStream();
+            pixStream.Write(pixels, 0, (int)(width * height * 4));
+
+            return cropBmp;
+        }
+    }
+
+    /// <summary>
+    /// Use BitmapTransform to define the region to crop, and then get the pixel data in the region
+    /// </summary>
+    public async static Task<byte[]> GetPixelData(BitmapDecoder decoder,
+        uint startPointX, uint startPointY,
+        uint width, uint height)
+    {
+        return await GetPixelData(decoder,
+            startPointX, startPointY,
+            width, height,
+            decoder.PixelWidth, decoder.PixelHeight);
+    }
+
+    /// <summary>
+    /// Use BitmapTransform to define the region to crop, and then get the pixel data in the region.
+    /// If you want to get the pixel data of a scaled image, set the scaledWidth and scaledHeight
+    /// of the scaled image.
+    /// </summary>
+    public async static Task<byte[]> GetPixelData(BitmapDecoder decoder,
+        uint startPointX, uint startPointY,
+        uint width, uint height,
+        uint scaledWidth, uint scaledHeight)
+    {
+        BitmapTransform transform = new BitmapTransform();
+        BitmapBounds bounds = new BitmapBounds();
+        bounds.X = startPointX;
+        bounds.Y = startPointY;
+        bounds.Height = height;
+        bounds.Width = width;
+        transform.Bounds = bounds;
+        transform.ScaledWidth = scaledWidth;
+        transform.ScaledHeight = scaledHeight;
+
+        try
+        {
+            // Get the cropped pixels within the bounds of transform.
+            PixelDataProvider pix = await decoder.GetPixelDataAsync(
+                BitmapPixelFormat.Bgra8,
+                BitmapAlphaMode.Straight,
+                transform,
+                ExifOrientationMode.IgnoreExifOrientation,
+                ColorManagementMode.ColorManageToSRgb);
+
+            byte[] pixels = pix.DetachPixelData();
+
+            return pixels;
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"GetPixelDataScaled: {ex.Message}");
+            return new byte[] { 0 };
+        }
+    }
+    #endregion
 }
 
-
+#region [Supporting Classes]
 /// <summary>
 /// Supporting class for the <see cref="Extensions.Raise"/> helpers.
 /// </summary>
@@ -5114,3 +5651,4 @@ public class JsonBuilder
         return container.ToString();
     }
 }
+#endregion

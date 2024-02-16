@@ -8,10 +8,10 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
-using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Data;
+using Microsoft.UI.Xaml.Hosting;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Navigation;
@@ -21,6 +21,11 @@ using Windows.Foundation.Collections;
 using Windows.Storage;
 using Windows.Storage.Search;
 
+#region [For Acrylic Brush Effect]
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Composition.SystemBackdrops;
+using WinRT; // required to support Window.As<ICompositionSupportsSystemBackdrop>()
+#endregion
 
 using WinUIDemo.Models;
 
@@ -31,15 +36,15 @@ namespace WinUIDemo;
 /// </summary>
 public sealed partial class MainWindow : Window
 {
-    
-
     ValueStopwatch _elapsed = new ValueStopwatch();
     public FileLogger? Logger { get; private set; }
+    public SettingsManager AppSettings { get; private set; }
+    public static Windows.UI.Color BackdropColor { get; private set; }
 
-    /// <summary>
-    /// Primary Constructor
-    /// </summary>
-    public MainWindow()
+	/// <summary>
+	/// Primary Constructor
+	/// </summary>
+	public MainWindow()
     {
         Title = App.GetCurrentAssemblyName()?.Split(',')[0];
         this.InitializeComponent();
@@ -48,20 +53,23 @@ public sealed partial class MainWindow : Window
         this.ExtendsContentIntoTitleBar = true;
         this.SetTitleBar(CustomTitleBar);
         Logger = App.GetService<FileLogger>();
+        AppSettings = App.GetService<SettingsManager>() ?? new SettingsManager();
 
         // Sample some of the Windows.UI.ViewManagement.UISettings:
         Debug.WriteLine($"{nameof(App.TextScaleFactor)} => {App.TextScaleFactor}");
         Debug.WriteLine($"{nameof(App.AnimationsEffectsEnabled)} => {App.AnimationsEffectsEnabled}");
         Debug.WriteLine($"{nameof(App.TransparencyEffectsEnabled)} => {App.TransparencyEffectsEnabled}");
         Debug.WriteLine($"{nameof(App.AutoHideScrollbars)} => {App.AutoHideScrollbars}");
+
+        // Invoke the DesktopAcrylicController
+        _ = TrySetAcrylicBackdrop();
     }
 
-    /// <summary>
-    /// Secondary Constructor
-    /// </summary>
-    public MainWindow(Dictionary<string, string> args) : this()
+	/// <summary>
+	/// Secondary Constructor
+	/// </summary>
+	public MainWindow(Dictionary<string, string> args) : this()
     {
-        Logger = App.GetService<FileLogger>();
         Logger?.WriteLine($"Received arguments: {args.ToString<string,string>()}", LogLevel.Debug);
         if (args.TryGetValue("-mode", out string? val) && !string.IsNullOrEmpty(val) && val.Contains("test"))
         {
@@ -79,8 +87,194 @@ public sealed partial class MainWindow : Window
 
             // Testing hash options
             TestHashes();
+
+			// Testing PackageManagerHelper
+			TestPackageListing();
+
+            _randomizeColor = true;
+		}
+    }
+
+	#region [For Acrylic Brush Effect]
+    bool _randomizeColor = false;
+	bool _attemptedBackdrop = false;
+	WindowsSystemDispatcherQueueHelper? _wsdqHelper;
+	DesktopAcrylicController? _acrylicController;
+	MicaController? _micaController; // Win11 only
+	SystemBackdropConfiguration? _configurationSource;
+	#endregion
+
+	#region [Acrylic Brush Background]
+	/// <summary>
+	/// Do not call more than once!
+	/// https://stackoverflow.com/questions/76535706/easiest-way-to-set-the-window-background-to-an-acrylic-brush-in-winui3/76536129#76536129
+	/// </summary>
+	/// <returns>true if DesktopAcrylicController is supported, false otherwise</returns>
+	bool TrySetAcrylicBackdrop()
+    {
+        if (_attemptedBackdrop)
+            return _attemptedBackdrop;
+
+        _attemptedBackdrop = true;
+
+        if (DesktopAcrylicController.IsSupported())
+        {
+            _wsdqHelper = new WindowsSystemDispatcherQueueHelper();
+            _wsdqHelper.EnsureWindowsSystemDispatcherQueueController();
+
+            // Hooking up the policy object
+            _configurationSource = new SystemBackdropConfiguration();
+            this.Activated += WindowOnActivated;
+            this.Closed += WindowOnClosed;
+            ((FrameworkElement)this.Content).ActualThemeChanged += WindowOnThemeChanged;
+
+            // Initial configuration state.
+            _configurationSource.IsInputActive = true;
+            SetConfigurationSourceTheme();
+
+            if (AppSettings.Config.RandomBackdrop)
+			    BackdropColor = Extensions.GetRandomMicrosoftUIColor();
+            else
+                BackdropColor = Microsoft.UI.Colors.Navy;
+
+            if (App.WindowsVersion.Major >= 11) // Windows 11
+            {
+                _micaController = new Microsoft.UI.Composition.SystemBackdrops.MicaController();
+                _micaController.TintOpacity = 0.2f; // May be too bright against a light background.
+                _micaController.LuminosityOpacity = 0.1f;
+                //_micaController.TintColor = Microsoft.UI.Colors.Navy;
+                _micaController.TintColor = BackdropColor;
+				// Fallback color is only used when the window state becomes deactivated.
+				_micaController.FallbackColor = Microsoft.UI.Colors.Transparent;
+                // Note: Be sure to have "using WinRT;" to support the Window.As<...>() call.
+                _micaController.AddSystemBackdropTarget(this.As<Microsoft.UI.Composition.ICompositionSupportsSystemBackdrop>());
+                _micaController.SetSystemBackdropConfiguration(_configurationSource);
+            }
+            else // Windows 10
+            {
+                // Enable the system backdrop.
+                _acrylicController = new Microsoft.UI.Composition.SystemBackdrops.DesktopAcrylicController();
+                _acrylicController.TintOpacity = 0.2f; // May be too bright against a light background.
+                _acrylicController.LuminosityOpacity = 0.1f;
+				//_acrylicController.TintColor = Microsoft.UI.Colors.Navy;
+                _acrylicController.TintColor = BackdropColor;
+                // Fallback color is only used when the window state becomes deactivated.
+				_acrylicController.FallbackColor = Microsoft.UI.Colors.Transparent;
+                // Note: Be sure to have "using WinRT;" to support the Window.As<...>() call.
+				_acrylicController.AddSystemBackdropTarget(this.As<Microsoft.UI.Composition.ICompositionSupportsSystemBackdrop>());
+                _acrylicController.SetSystemBackdropConfiguration(_configurationSource);
+            }
+            return true; // succeeded
+        }
+
+        Logger?.WriteLine($"DesktopAcrylicController is not supported", LogLevel.Warning);
+        return false; // Acrylic is not supported on this system
+    }
+
+    void WindowOnActivated(object sender, WindowActivatedEventArgs args)
+    {
+        Debug.WriteLine($"WindowActivationState is now {args.WindowActivationState}");
+
+        if (_configurationSource is not null)
+        {
+            _configurationSource.IsInputActive = args.WindowActivationState != WindowActivationState.Deactivated;
+
+			#region [If you wanted to randomize the color on each activation]
+            var newColor = Extensions.GetRandomMicrosoftUIColor();
+
+			if (App.WindowsVersion.Major >= 11) // Windows 11
+            {
+                if (_micaController is not null && _randomizeColor)
+                {
+                    Debug.WriteLine($"New color will be {newColor}");
+                    _micaController.TintColor = newColor;
+                    _micaController.FallbackColor = Microsoft.UI.Colors.Transparent;
+				}
+            }
+            else // Windows 10
+            {
+                if (_acrylicController is not null && _randomizeColor)
+                {
+                    Debug.WriteLine($"New color will be {newColor}");
+					_acrylicController.TintColor = newColor;
+                    _acrylicController.FallbackColor = Microsoft.UI.Colors.Transparent;
+				}
+            }
+			#endregion
+		}
+	}
+
+    void WindowOnClosed(object sender, WindowEventArgs args)
+    {
+        // Make sure any Mica/Acrylic controller is disposed
+        // so it doesn't try to use this closed window.
+        if (App.WindowsVersion.Major >= 11) // Windows 11
+        {
+            if (_micaController is not null)
+            {
+                _micaController.Dispose();
+                _micaController = null;
+            }
+        }
+        else // Windows 10
+        {
+            if (_acrylicController is not null)
+            {
+                _acrylicController.Dispose();
+                _acrylicController = null;
+            }
+        }
+
+        this.Activated -= WindowOnActivated;
+        _configurationSource = null;
+    }
+
+    void WindowOnThemeChanged(FrameworkElement sender, object args)
+    {
+        if (_configurationSource is not null)
+        {
+            SetConfigurationSourceTheme();
         }
     }
+
+    void SetConfigurationSourceTheme()
+    {
+        if (_configurationSource is not null)
+        {
+            switch (((FrameworkElement)this.Content).ActualTheme)
+            {
+                case ElementTheme.Dark:
+                    _configurationSource.Theme = SystemBackdropTheme.Dark;
+                    break;
+                case ElementTheme.Light:
+                    _configurationSource.Theme = SystemBackdropTheme.Light;
+                    break;
+                case ElementTheme.Default:
+                    _configurationSource.Theme = SystemBackdropTheme.Default;
+                    break;
+            }
+        }
+    }
+
+    /// <summary>
+    /// My poor man's version. This does not allow the main window to be translucent.
+    /// In the MainWindow constructor: this.Activated += MainWindowOnActivated;
+    /// </summary>
+    void MainWindowOnActivated(object sender, WindowActivatedEventArgs args)
+    {
+        // Configure the AcrylicBrush.
+        _acrylicBrush.TintTransitionDuration = TimeSpan.FromSeconds(2);
+        _acrylicBrush.TintOpacity = 0.15;
+        _acrylicBrush.TintLuminosityOpacity = 0.1;
+        _acrylicBrush.TintColor = Extensions.GetRandomMicrosoftUIColor();
+	    // Fallback color is only used when the window state becomes deactivated.
+		_acrylicBrush.FallbackColor = Microsoft.UI.Colors.Transparent;
+
+        // Set the AcrylicBrush as the background of the window.
+        this.Root.Background = _acrylicBrush;
+    }
+    static AcrylicBrush _acrylicBrush = new AcrylicBrush();
+    #endregion
 
     #region [Helpers]
     void ChangeCursorIfUWP()
@@ -97,20 +291,36 @@ public sealed partial class MainWindow : Window
         var root = this.Content as FrameworkElement;
         await root?.MessageDialogAsync("Notice", message);
     }
-    #endregion
+	#endregion
 
-    #region [Superfluous Tests]
-    /// <summary>
-    /// Testing method for <see cref="CacheItem{T}"/>.
-    /// </summary>
-    /// <param name="folder">directory path</param>
-    /// <param name="arbitraryWait">millisecond amount</param>
-    /// <remarks>
-    /// If this was a memory-based, long-running service/application we 
-    /// could use this to keep track of the last time we examined a folder.
-    /// This could also be used for login/session tracking.
-    /// </remarks>
-    void TestCache(string? folder, int arbitraryWait = 60001)
+	#region [Superfluous Tests]
+	/// <summary>
+	/// Uses the <see cref="Windows.Management.Deployment.PackageManager"/>
+    /// to walk through all installed packages on the local machine.
+	/// </summary>
+	void TestPackageListing()
+    {
+		Task.Run(delegate () 
+        { 
+            PackageManagerHelper.IteratePackages();
+
+        }).ContinueWith(t =>
+		{
+		    Logger?.WriteLine($"{nameof(PackageManagerHelper)} test complete", LogLevel.Debug);
+		});
+    }
+
+	/// <summary>
+	/// Testing method for <see cref="CacheItem{T}"/>.
+	/// </summary>
+	/// <param name="folder">directory path</param>
+	/// <param name="arbitraryWait">millisecond amount</param>
+	/// <remarks>
+	/// If this was a memory-based, long-running service/application we 
+	/// could use this to keep track of the last time we examined a folder.
+	/// This could also be used for login/session tracking.
+	/// </remarks>
+	void TestCache(string? folder, int arbitraryWait = 60001)
     {
         if (string.IsNullOrEmpty(folder))
         {

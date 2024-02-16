@@ -31,5 +31,19 @@ public sealed partial class MainView : UserControl
 
         ViewModel = App.GetService<ViewModels.MainViewModel>();
         this.InitializeComponent();
+
+		this.Loaded += MainViewOnLoaded;
+	}
+
+    void MainViewOnLoaded(object sender, RoutedEventArgs e)
+    {
+        Debug.WriteLine($"{System.Reflection.MethodBase.GetCurrentMethod()?.DeclaringType?.Name}__{System.Reflection.MethodBase.GetCurrentMethod()?.Name}");
+        
+        if (ViewModel != null && ViewModel.ShowFrame)
+        {
+            frame.Content = new Frame();
+            frame.Opacity = 1d;
+            frame.Navigate(typeof(TestPage));
+        }
     }
 }

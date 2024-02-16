@@ -43,11 +43,13 @@ public sealed class CRC32 : HashAlgorithm
         hash = seed;
     }
 
+    /// <inheritdoc />
     protected override void HashCore(byte[] array, int ibStart, int cbSize)
     {
         hash = CalculateHash(table, hash, array, ibStart, cbSize);
     }
 
+    /// <inheritdoc />
     protected override byte[] HashFinal()
     {
         var hashBuffer = UInt32ToBigEndianBytes(~hash);

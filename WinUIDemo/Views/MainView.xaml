@@ -2,6 +2,7 @@
     x:Class="WinUIDemo.Views.MainView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:ctrl="using:WinUIDemo.Controls"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:local="using:WinUIDemo.Views"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -14,19 +15,16 @@
         event you want to merge another UI into the application,
         e.g. a navigation bar.
     -->
-    <Grid Margin="-9">
-
-        <!--  Window Dressing  -->
-        <!--
-        <Rectangle
-            Margin="-20,-1,-20,-20"
-            Fill="{ThemeResource CustomAcrylicInAppBrush}"
-            Opacity="0.5"
-            Stretch="UniformToFill" />
-        -->
+    <Grid Margin="-9" Background="Transparent">
+        <Grid.BackgroundTransition>
+            <BrushTransition />
+        </Grid.BackgroundTransition>
 
         <!--  Repo Backup Content  -->
         <local:FileBackupView Margin="10,0" />
+
+        <!--  For Page Tests  -->
+        <Frame x:Name="frame" Opacity="0" />
 
     </Grid>
 </UserControl>

@@ -9,7 +9,7 @@
   <Identity
     Name="27085c1d-75b0-494f-8785-8e388e71c68f"
     Publisher="CN=11033551"
-    Version="1.0.0.0" />
+    Version="1.0.0.12" />
 
   <Properties>
     <DisplayName>WinUIDemo</DisplayName>

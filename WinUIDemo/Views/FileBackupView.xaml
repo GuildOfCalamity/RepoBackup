@@ -18,12 +18,27 @@
 
     <!--  Margin Key: left, top, right, bottom  -->
 
-    <Grid>
+    <Grid
+        x:Name="RootGrid"
+        Background="Transparent"
+        FocusVisualMargin="-4"
+        FocusVisualPrimaryBrush="{ThemeResource QuinaryBrush}"
+        FocusVisualPrimaryThickness="1"
+        FocusVisualSecondaryBrush="{ThemeResource QuinaryBrush}"
+        FocusVisualSecondaryThickness="0">
+
         <Grid.ChildrenTransitions>
             <TransitionCollection>
                 <AddDeleteThemeTransition />
             </TransitionCollection>
         </Grid.ChildrenTransitions>
+
+        <!-- [Now using KeyboardCommandHandler in code-behind]
+        <Grid.KeyboardAccelerators>
+            <KeyboardAccelerator Key="F1" Invoked="KeyboardAcceleratorF1Invoked" />
+            <KeyboardAccelerator Key="Escape" />
+        </Grid.KeyboardAccelerators>
+        -->
 
         <!--  Define SplitView Container  -->
         <SplitView
@@ -133,6 +148,14 @@
                                         IsEnabled="{x:Bind IsBusy, Mode=OneWay, Converter={StaticResource BooleanInverter}}"
                                         ToolTipService.ToolTip="You'll need patience for this"
                                         Unchecked="cbBackupInitialChecked" />
+                                    <CheckBox
+                                        x:Name="cbRandomBackdrop"
+                                        Checked="cbRandomBackdropChecked"
+                                        Content="Random backdrop color on startup"
+                                        IsChecked="False"
+                                        IsEnabled="{x:Bind IsBusy, Mode=OneWay, Converter={StaticResource BooleanInverter}}"
+                                        ToolTipService.ToolTip="Applies a new acrylic color on each startup"
+                                        Unchecked="cbRandomBackdropChecked" />
                                     <ComboBox
                                         x:Name="ThreadComboBox"
                                         Margin="2,5"
@@ -787,6 +810,48 @@
                     </ScrollViewer>
                 </Grid>
 
+                <!--  TextInput Control Test  -->
+                <StackPanel
+                    x:Name="spInputControl"
+                    Grid.Row="4"
+                    Width="290"
+                    Margin="4,4,4,14"
+                    Padding="2"
+                    HorizontalAlignment="Left"
+                    VerticalAlignment="Bottom"
+                    BorderBrush="{ThemeResource SeeThroughBrush}"
+                    BorderThickness="2"
+                    CornerRadius="4"
+                    Visibility="Collapsed">
+                    <StackPanel.Resources>
+                        <Storyboard x:Name="InputStoryboardShow">
+                            <DoubleAnimation
+                                x:Name="opacityShowAnimation"
+                                Storyboard.TargetName="inputControl"
+                                Storyboard.TargetProperty="Opacity"
+                                From="0"
+                                To="1"
+                                Duration="00:00:00.5" />
+                        </Storyboard>
+                        <Storyboard x:Name="InputStoryboardHide">
+                            <DoubleAnimation
+                                x:Name="opacityHideAnimation"
+                                Storyboard.TargetName="inputControl"
+                                Storyboard.TargetProperty="Opacity"
+                                From="1"
+                                To="0"
+                                Duration="00:00:00.5" />
+                        </Storyboard>
+                    </StackPanel.Resources>
+                    <ctrl:TextInputControl
+                        x:Name="inputControl"
+                        Title="Input:"
+                        Width="280"
+                        OnDismissKeyDown="TextInputOnDismissKeyDown"
+                        OnTextInputButtonClicked="TextInputOnButtonClicked"
+                        OnTextInputKeyDown="TextInputOnKeyDown" />
+                </StackPanel>
+
                 <!--  Status Bar  -->
                 <InfoBar
                     x:Name="infoBar"
@@ -808,8 +873,8 @@
                                         DependencyProperty for the CommandParameter itself.
                                         https://stackoverflow.com/questions/75139620/how-to-pass-commands-across-different-xaml-files-controls
                                         https://learn.microsoft.com/en-us/windows/uwp/data-binding/data-binding-in-depth
-                                        {Binding} is more flexible but less performant).
-                                        {x:Bind} is more performant but less flexible).
+                                        {Binding} is more flexible but less performant.
+                                        {x:Bind} is more performant but less flexible.
                                     -->
                                     <MenuFlyoutItem
                                         x:Name="mfiOpenAbout"
@@ -854,6 +919,7 @@
                         </DropDownButton>
                     </InfoBar.ActionButton>
                 </InfoBar>
+
             </Grid>
 
         </SplitView>

@@ -102,6 +102,9 @@ namespace WinUIDemo
 
                     try
                     {
+#if DEBUG
+                        Debug.WriteLine($"{message}", $"{caller}");
+#endif
                         using (var fileStream = new StreamWriter(File.OpenWrite(fullPath)))
                         {
                             // Jump to the end of the file before writing (same as append).
@@ -171,7 +174,10 @@ namespace WinUIDemo
             {
                 try
                 {
-                    using (var fileStream = new StreamWriter(File.OpenWrite(fullPath)))
+#if DEBUG
+					Debug.WriteLine($"{message}", $"{caller}");
+#endif
+					using (var fileStream = new StreamWriter(File.OpenWrite(fullPath)))
                     {
                         // Jump to the end of the file before writing (same as append).
                         fileStream.BaseStream.Seek(0, SeekOrigin.End);

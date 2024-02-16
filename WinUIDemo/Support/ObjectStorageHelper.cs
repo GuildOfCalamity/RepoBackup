@@ -38,6 +38,9 @@ namespace WinUIDemo;
 /// and the Folder property to <see cref="Windows.Storage.ApplicationData.Current.LocalFolder"/> automatically if they are null.
 /// To test as a Packaged application you must change the {WindowsPackageType} from "None" to "MSIX" in your csproj file.
 /// </summary>
+/// <remarks>
+/// Can only be used with a PACKAGED application!
+/// </remarks>
 public class ObjectStorageHelper : IObjectStorageHelper
 {
     private readonly IObjectSerializer serializer;

@@ -7,6 +7,7 @@ using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Net;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -28,13 +29,13 @@ using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Navigation;
 using Microsoft.UI.Xaml.Shapes;
 
+using Windows.Data.Xml.Dom;
 using Windows.Foundation;
 using Windows.Foundation.Collections;
-using Windows.System.Threading;
-using Windows.Data.Xml.Dom;
 using Windows.Storage;
-using Windows.Storage.Search;
 using Windows.Storage.AccessCache;
+using Windows.Storage.Search;
+using Windows.System.Threading;
 using Windows.UI.Notifications;
 using Windows.UI.Popups;
 using Windows.UI.StartScreen;
@@ -44,7 +45,11 @@ using Windows.UI.ViewManagement;
 using Path = System.IO.Path;
 
 using WinUIDemo.Models;
-
+using WinUIDemo.Support;
+using WinUIDemo.Controls;
+using Windows.Graphics.Printing;
+using WinUIDemo.Printing;
+using Microsoft.UI.Xaml.Documents;
 
 namespace WinUIDemo.Views;
 
@@ -58,25 +63,29 @@ namespace WinUIDemo.Views;
 public sealed partial class FileBackupView : UserControl
 {
     #region [Properties]
-    // We'll need to define these up top so that the GC doesn't get them later.
+    // Shimmer effect props: We'll need to define these up top so the GC doesn't get them later.
     static Microsoft.UI.Composition.Compositor? _compositor;
     static Microsoft.UI.Composition.Visual? _textVisual;
     static Microsoft.UI.Composition.PointLight? _pointLight;
     static Microsoft.UI.Composition.PointLight? _pointLight2;
-    
-    static bool _tipShown = false;
+
+	static bool _tipShown = false;
     static bool _evaluating = false;
     static bool _startupFinished = false;
     static string _lastError = "";
     static readonly object _obj = new object();
+    DeviceWatcherHelper? _dwh;
     ThreadPoolTimer? _periodicTimer;
     DispatcherTimer? _autoCloseTimer;
     DispatcherQueueTimer? _debounceTimer;
     ValueStopwatch _elapsed = new ValueStopwatch();
     static CancellationTokenSource? _cts;
+    readonly static SlimLock _lock = SlimLock.Create();
     static Queue<LogEntry> _logQueue = new Queue<LogEntry>();
+    public ViewModels.MainViewModel? ViewModel { get; private set; }
     public FileLogger? Logger { get; private set; }
-    public Settings Config { get; private set; } = new();
+    public SettingsManager AppSettings { get; private set; }
+    //public Settings Config { get; private set; } = new();
     public List<string> AutoSuggestions { get; private set; } = new();
     public List<MRU> MostRecent { get; private set; } = new();
     public DateTime PageTime { get; private set; } = DateTime.Now;
@@ -212,12 +221,16 @@ public sealed partial class FileBackupView : UserControl
         typeof(string),
         typeof(FileBackupView),
         new PropertyMetadata(""));
+
     #endregion
 
     #region [Commands]
     public ICommand OpenLogFileCommand { get; }
     public ICommand OpenAboutCommand { get; }
     public ICommand TestingCommand { get; }
+
+    ICommandHandler<KeyRoutedEventArgs> _keyboardHandler;
+    ICommandHandler<PointerRoutedEventArgs> _mouseHandler;
     #endregion
 
     /// <summary>
@@ -229,22 +242,29 @@ public sealed partial class FileBackupView : UserControl
 
         this.InitializeComponent();
 
+        // Demonstrate our service getter.
+        ViewModel = App.GetService<ViewModels.MainViewModel>();
+
         #region [ILogger]
         Logger = App.GetService<FileLogger>();
         
         if (Logger != null)
             Logger.OnException += LoggerOnException;
+        #endregion
 
-        // The idea behind this logger is to only log errors/issues for the
-        // user to review so that the file size will not become unwieldy, but
-        // we'll at least log the init so that there is something to look at.
-        _logQueue.Enqueue(new LogEntry { Message = $"MID={App.MachineID?.Replace("-","")}", Method = "Constructor", Severity = LogLevel.Debug, Time = DateTime.Now });
+        #region [ISettingsManager]
+        AppSettings = App.GetService<SettingsManager>() ?? new SettingsManager();
         #endregion
 
         #region [Configure Commands]
         OpenLogFileCommand = new RelayCommand<object>((ctrl) => OpenLogFile(ctrl));
         OpenAboutCommand = new RelayCommand<object>(async (ctrl) => await OpenAbout(ctrl));
         TestingCommand = new RelayCommand<object>((o) => TestCommandParameter(o));
+        InitializeKeyboardHandler();
+        InitializeMouseHandler();
+        this.KeyDown += FileBackupViewOnKeyDown;
+        RootGrid.KeyDown += FileBackupViewOnKeyDown;
+        RootGrid.PointerWheelChanged += FileBackupViewOnPointerWheelChanged;
         #endregion
 
         #region [Register Events]
@@ -256,6 +276,8 @@ public sealed partial class FileBackupView : UserControl
         //SettingsSplitView.PointerExited += (_,_) => { SettingsSplitView.IsPaneOpen = false; }; // You may or may not want this sensitivity to auto-close.
         teachingTip.RegisterPropertyChangedCallback(TeachingTip.IsOpenProperty, IsTipOpenChanged);
         tbPath.RegisterPropertyChangedCallback(TextBox.FocusStateProperty, IsFocusStateChanged);
+        InputStoryboardHide.Completed += InputStoryboardHideOnCompleted;
+        InputStoryboardShow.Completed += InputStoryboardShowOnCompleted;
         #endregion
 
         #region [Collection Changed Routines]
@@ -277,44 +299,139 @@ public sealed partial class FileBackupView : UserControl
         */
         #endregion
 
-        #region [Deferred Logging System]
-        ConfigureThreadPoolTimer(() => 
-        {
-            TotalCPU = $"{GetCPUTime()} ({cpuUsage})";
-            MemoryCount = GetMemoryCommit();
-            CheckLoggingQueue(); 
-        },
-        () => 
-        { 
-            Debug.WriteLine($"ThreadPoolTimer cancelled."); 
-        },
-        TimeSpan.FromSeconds(4));
-        #endregion
-
         _debounceTimer = DispatcherQueue.CreateTimer();
+
+        // The idea behind this logger is to only log errors/issues for the user to review so that the file
+        // size will not become unwieldy, but we'll at least log the init so that there's something to look at.
+        _logQueue.Enqueue(new LogEntry { Message = $"Deferred log queue test entry", Method = "FileBackupView", Severity = LogLevel.Debug, Time = DateTime.Now });
     }
 
+    #region [Keyboard Handler]
+    void FileBackupViewOnKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        var result = _keyboardHandler.Handle(e);
+        if (result.ShouldHandle) { e.Handled = true; }
+    }
+
+    void InitializeKeyboardHandler()
+    {
+        _keyboardHandler = new KeyboardCommandHandler(new List<IKeyboardCommand<KeyRoutedEventArgs>>()
+        {
+            new KeyboardCommand<KeyRoutedEventArgs>(Windows.System.VirtualKey.Escape, (args) =>
+            {
+                AppOnWindowClosing("Escape");
+                Application.Current.Exit();
+            }),
+            new KeyboardCommand<KeyRoutedEventArgs>(true, false, false, Windows.System.VirtualKey.B, (args) =>
+            {
+                btnBackupOnClick(this, new RoutedEventArgs());
+            }),
+            new KeyboardCommand<KeyRoutedEventArgs>(true, false, false, Windows.System.VirtualKey.A, async (args) =>
+            {
+                await OpenAbout(this);
+            }),
+            new KeyboardCommand<KeyRoutedEventArgs>(Windows.System.VirtualKey.F1, (args) => 
+            { 
+                OnSettingsClick(this, new RoutedEventArgs()); 
+            }),
+            new KeyboardCommand<KeyRoutedEventArgs>(Windows.System.VirtualKey.F3, (args) =>
+            {
+                if (infoBar.IsOpen)
+                {
+                    NotifyInfoBar("Close me first", InfoBarSeverity.Warning);
+                }
+                else if (spInputControl.Visibility == Visibility.Visible)
+                {
+                    InputStoryboardHide.Begin();
+                    //spInputControl.Visibility = Visibility.Collapsed;
+                }
+                else
+                {
+                    InputStoryboardShow.Begin();
+                    spInputControl.Visibility = Visibility.Visible;
+                }
+            })
+        });
+    }
+
+    /// <summary>
+    /// We using the KeyboardCommandHandler now instead of the Grid.KeyboardAccelerators
+    /// </summary>
+    /// <param name="sender"><see cref="KeyboardAccelerator"/></param>
+    /// <param name="args"><see cref="KeyboardAcceleratorInvokedEventArgs"/></param>
+    void KeyboardAcceleratorF1Invoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+    {
+        if (_debounceTimer == null)
+            _debounceTimer = DispatcherQueue.CreateTimer();
+
+        // The key event can fire twice on closing, so we'll only execute this
+        // code after some amount of time has elapsed since the last trigger.
+        _debounceTimer?.Debounce(async () =>
+        {
+            Debug.WriteLine($"[Debounce F1Invoked {DateTime.Now.ToString("hh:mm:ss.fff tt")}]");
+            if (SettingsSplitView.IsPaneOpen)
+                SettingsSplitView.IsPaneOpen = false;
+            else
+                SettingsSplitView.IsPaneOpen = true;
+
+        }, TimeSpan.FromSeconds(0.5));
+    }
+    #endregion
+
+    #region [Mouse Handler]
+    void InitializeMouseHandler()
+    {
+        _mouseHandler = new MouseCommandHandler(new List<IMouseCommand<PointerRoutedEventArgs>>()
+        {
+            new MouseCommand<PointerRoutedEventArgs>(true, false, false, false, false, false, (args) => 
+            {
+                ChangeFontOnMouseInput(args);
+            }),
+        }, this);
+    }
+
+    void FileBackupViewOnPointerWheelChanged(object sender, PointerRoutedEventArgs e)
+    {
+        var result = _mouseHandler.Handle(e);
+
+        // Always handle it so ScrollViewer won't pick up the event.
+        e.Handled = true;
+    }
+
+    /// <summary>
+    /// Ctrl+Wheel changes font font size for logging messages.
+    /// </summary>
+    void ChangeFontOnMouseInput(PointerRoutedEventArgs args)
+    {
+        if (!_startupFinished) { return; }
+
+        var mouseWheelDelta = args.GetCurrentPoint(this).Properties.MouseWheelDelta;
+
+        if (mouseWheelDelta > 0) // positive delta = UP
+            Write($"Increase font size here ({mouseWheelDelta})", LogLevel.Debug);
+        else if (mouseWheelDelta < 0) // negative delta = DOWN
+            Write($"Decrease font size here ({mouseWheelDelta})", LogLevel.Debug);
+    }
+    #endregion
+
     #region [Events]
-    static bool cpuRunning = true;
-    static string cpuUsage = "";
     void FileBackupViewOnLoaded(object sender, RoutedEventArgs e)
     {
-        #region [Load Settings]
-        LoadSettings();
-        
-        // Test our JSON extension method via logging.
-        var json = Config.ToJsonObject();
-        Logger?.WriteLine($"{json}", LogLevel.Info);
-
-        cbWorkLocation.IsChecked = Config.AtWork;
-        cbOpenExplorer.IsChecked = Config.ExplorerShell;
-        cbBackupInitial.IsChecked = Config.FullInitialBackup;
-        ThreadComboBox.SelectedIndex = Config.ThreadIndex;
-        SpoiledComboBox.SelectedIndex = Config.StaleIndex;
-        if (Config.AtWork)
-            tbBuffer.Text = Config.WorkBufferFolder;
+        #region [Apply Settings]
+        cbWorkLocation.IsChecked = AppSettings.Config.AtWork;
+        cbOpenExplorer.IsChecked = AppSettings.Config.ExplorerShell;
+        cbBackupInitial.IsChecked = AppSettings.Config.FullInitialBackup;
+        cbRandomBackdrop.IsChecked = AppSettings.Config.RandomBackdrop;
+        ThreadComboBox.SelectedIndex = AppSettings.Config.ThreadIndex;
+        SpoiledComboBox.SelectedIndex = AppSettings.Config.StaleIndex;
+        if (AppSettings.Config.AtWork)
+            tbBuffer.Text = AppSettings.Config.WorkBufferFolder;
         else
-            tbBuffer.Text = Config.HomeBufferFolder;
+            tbBuffer.Text = AppSettings.Config.HomeBufferFolder;
+
+        // Test our JSON extension method via logging.
+        var json = AppSettings.Config.ToJsonObject();
+        Logger?.WriteLine($"{json}", LogLevel.Info);
         #endregion
 
         #region [Load Most Recently Used]
@@ -328,7 +445,7 @@ public sealed partial class FileBackupView : UserControl
             {
                 tally += mru.Count;
                 // Check MRU freshness...
-                int days = StaleCount[Config.StaleIndex] * -1;
+                int days = StaleCount[AppSettings.Config.StaleIndex] * -1;
                 if (mru.Time < DateTime.Now.AddDays(days))
                     Write($"'{mru.Folder}' needs to be evaluated soon.", LogLevel.Notice);
             }
@@ -462,13 +579,70 @@ public sealed partial class FileBackupView : UserControl
         #region [Superfluous]
         Task.Run(async delegate () { await CheckJumpList(); });
 
+        Task.Run(async delegate () 
+        {
+            string filePath = ""; string basePath = "";
+
+            if (App.IsPackaged)
+                basePath = ApplicationData.Current.LocalFolder.Path;
+            else
+                basePath = Directory.GetCurrentDirectory();
+
+            filePath = Path.Combine(basePath, @"MRU.xml");
+
+            if (File.Exists(filePath))
+            {
+                TextFile textFile = await PackagedFileSystemUtility.ReadFile(filePath, ignoreFileSizeLimit: true, Extensions.GetEncoding(filePath));
+            }
+        });
+
         // Prevent idle-timeout while app is running.
         App.ActivateDisplayRequest();
 
         //LogAssemblies();
+        //LogPackages();
 
         var dict = Extensions.ReflectFieldInfo(typeof(FileBackupView));
         Debug.WriteLine($"{nameof(FileBackupView)} is utilizing {dict.Count} object types.");
+        #endregion
+
+        #region [Testing support for a USB storage device]
+        //_dwh = new DeviceWatcherHelper(DispatcherQueue.GetForCurrentThread(), ref _logMessages);
+        //_ = _dwh.WatchDevices();
+        //_dwh.LookupDevice("", "", @"\\?\USB#VID_0A12&PID_0001#6&268a6ccc&0&3#{0850302a-b344-4fda-9be9-90576b8d46f0}");
+        //_dwh.LookupDevice("", "", @"\\?\HID#VID_046D&PID_C534&MI_00#8&2f0241a8&0&0000#{884b96c3-56ef-11d1-bc8c-00a0c91405dd}");
+        #endregion
+
+        #region [Show which color was selected for DesktopAcrylicController]
+        if (AppSettings.Config.RandomBackdrop)
+        {
+            var possibilities = GetWinUIColorList();
+            var found = possibilities?.Any(obj => obj.Color == MainWindow.BackdropColor);
+            if (found.HasValue && found.Value)
+            {
+                var match = possibilities?.FirstOrDefault(obj => obj.Color == MainWindow.BackdropColor);
+                Write($"Backdrop color is {match.KeyName} ({match.HexCode})", LogLevel.Debug);
+            }
+            else
+            {
+                Write($"Backdrop color is {MainWindow.BackdropColor}", LogLevel.Debug);
+            }
+        }
+        #endregion
+
+        #region [Deferred Logging System]
+        ConfigureThreadPoolTimer(() =>
+        {
+            CheckLoggingQueue();
+            // We'll also using this timer to update our stats.
+            TotalCPU = $"{GetCPUTime()} ({cpuUsage})";
+            MemoryCount = GetMemoryCommit();
+        },
+        () =>
+        {
+            Debug.WriteLine($"ThreadPoolTimer cancelled.");
+        },
+        TimeSpan.FromSeconds(4));
         #endregion
 
         // Auto-select the repo path once loaded.
@@ -478,9 +652,11 @@ public sealed partial class FileBackupView : UserControl
             tbPath.SelectAll();
         });
 
-        // Signal for startup events.
+        // Signal for double-trigger events.
         _startupFinished = true;
     }
+    static bool cpuRunning = true;
+    static string cpuUsage = "";
 
     /// <summary>
     /// <see cref="ILogger"/> error event.
@@ -506,17 +682,13 @@ public sealed partial class FileBackupView : UserControl
             {
                 var header = item.Header as Controls.TabHeader;
                 if (header != null)
-                {
                     header.SetSelectedItem(true);
-                }
             }
             else
             {
                 var header = item.Header as Controls.TabHeader;
                 if (header != null)
-                {
                     header.SetSelectedItem(false);
-                }
             }
         }
     }
@@ -526,10 +698,16 @@ public sealed partial class FileBackupView : UserControl
     /// </summary>
     void AppOnWindowClosing(string obj)
     {
-        _periodicTimer?.Cancel();
+        if (_dwh != null)
+			_dwh.Dispose();
+        
+        if (_debounceTimer != null && _debounceTimer.IsRunning)
+            _debounceTimer.Stop();
+
+		_periodicTimer?.Cancel();
         _cts?.Cancel();
         cpuRunning = false;
-        SaveSettings();
+        AppSettings.SaveSettings();
     }
 
     /// <summary>
@@ -547,7 +725,7 @@ public sealed partial class FileBackupView : UserControl
     /// <summary>
     /// <see cref="Button"/> event.
     /// </summary>
-    void btnEditIndexDatabaseOnClick(object sender, RoutedEventArgs e)
+    async void btnEditIndexDatabaseOnClick(object sender, RoutedEventArgs e)
     {
         //Windows.UI.Notifications.TileUpdateManager.CreateTileUpdaterForApplication
 
@@ -608,6 +786,16 @@ public sealed partial class FileBackupView : UserControl
         catch (Exception ex)
         {
             Write($"{ex.Message}", LogLevel.Error);
+            
+            // Show a small dialog with the error.
+            ContentDialog warningDialog = new ContentDialog()
+            {
+                XamlRoot = (sender as Button)?.XamlRoot,
+                Title = "Warning",
+                Content = $"\n{ex.Message}",
+                PrimaryButtonText = "OK"
+            };
+            await warningDialog.ShowAsync();
         }
 
         IsBusy = false;
@@ -640,7 +828,7 @@ public sealed partial class FileBackupView : UserControl
         string? rootPath = Path.GetDirectoryName(workPath);
         string dbTitle = "rb_" + workPath.Replace(rootPath ?? "Unknown", "").Replace("\\","");
 
-        string msg = $"Performing {(Config.AtWork ? "work" : "home")} backup.";
+        string msg = $"Performing {(AppSettings.Config.AtWork ? "work" : "home")} backup.";
         NotifyInfoBar(msg, InfoBarSeverity.Informational);
         _logQueue.Enqueue(new LogEntry { Message = $"{msg} Path='{workPath}'", Method = $"BackupOnClick", Severity = LogLevel.Info, Time = DateTime.Now });
 
@@ -672,7 +860,7 @@ public sealed partial class FileBackupView : UserControl
                 _logQueue.Enqueue(new LogEntry { Message = msg, Method = $"IndexProcess", Severity = LogLevel.Success, Time = DateTime.Now });
                 UpdateMRU(workPath, totalFilesInspected);
                 ToastImageAndText(msg);
-                tbPath.DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Normal, () => { tbPath.Focus(FocusState.Programmatic); });
+                tbPath.DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Normal, () => { tbPath.Focus(FocusState.Programmatic); });
             }
             else
             {
@@ -711,6 +899,14 @@ public sealed partial class FileBackupView : UserControl
 
             e.Handled = true; // mark that we've handled it
         }
+        else if (e.Key == Windows.System.VirtualKey.F2)
+        {
+            if (Random.Shared.Next(1,3) == 2)
+                TestNoticeDialog(sender, e);
+            else
+                TestGenericDialog(sender, e);
+        }
+
         Debug.WriteLine($"User pressed the [{e.Key}] key.");
     }
     int currentPathSelection = 0;
@@ -728,9 +924,9 @@ public sealed partial class FileBackupView : UserControl
         if (!SettingsSplitView.IsPaneOpen)
         {
             if (cbWorkLocation.IsChecked.HasValue && cbWorkLocation.IsChecked.Value && !string.IsNullOrEmpty(tbBuffer.Text))
-                Config.WorkBufferFolder = tbBuffer.Text;
+                AppSettings.Config.WorkBufferFolder = tbBuffer.Text;
             else if (cbWorkLocation.IsChecked.HasValue && !cbWorkLocation.IsChecked.Value && !string.IsNullOrEmpty(tbBuffer.Text))
-                Config.HomeBufferFolder = tbBuffer.Text;
+                AppSettings.Config.HomeBufferFolder = tbBuffer.Text;
 
             if (App.AnimationsEffectsEnabled)
                 StoryboardPath.Stop();
@@ -775,8 +971,15 @@ public sealed partial class FileBackupView : UserControl
             _autoCloseTimer.Interval = TimeSpan.FromSeconds(4.0d);
             _autoCloseTimer.Tick += (_, _) =>
             {
-                tt.DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => { tt.IsOpen = false; });
-                if (_autoCloseTimer != null) { _autoCloseTimer.Stop(); }
+                try
+                {
+                    tt.DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => { tt.IsOpen = false; });
+                    if (_autoCloseTimer != null) { _autoCloseTimer.Stop(); }
+                }
+                catch (Exception)
+                {
+                    Debug.WriteLine($"Application may be in the process of closing.");
+                }
             };
             _autoCloseTimer.Start();
             tbPath.DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => { tbPath.Focus(FocusState.Programmatic); });
@@ -801,7 +1004,9 @@ public sealed partial class FileBackupView : UserControl
     /// </summary>
     void tbPathOnGotFocus(object sender, RoutedEventArgs e)
     {
-        if (!teachingTip.IsOpen && !_tipShown)
+        if (ViewModel != null && ViewModel.ShowFrame)
+            return;
+        else if (!teachingTip.IsOpen && !_tipShown)
             teachingTip.IsOpen = true;
     }
 
@@ -812,18 +1017,18 @@ public sealed partial class FileBackupView : UserControl
     {
         if (!_startupFinished) { return; }
 
-        Config.AtWork = cbWorkLocation.IsChecked ?? false;
+        AppSettings.Config.AtWork = cbWorkLocation.IsChecked ?? false;
 
-        if (Config.AtWork)
-            tbBuffer.Text = Config.WorkBufferFolder;
+        if (AppSettings.Config.AtWork)
+            tbBuffer.Text = AppSettings.Config.WorkBufferFolder;
         else
-            tbBuffer.Text = Config.HomeBufferFolder;
+            tbBuffer.Text = AppSettings.Config.HomeBufferFolder;
 
         // Try to cut back on extra typing.
-        if (Config.AtWork && tbPath.Text.Contains(Config.HomeRepoFolder, StringComparison.OrdinalIgnoreCase))
-            tbPath.Text = tbPath.Text.Replace(Config.HomeRepoFolder, Config.WorkRepoFolder, StringComparison.OrdinalIgnoreCase);
-        else if (!Config.AtWork && tbPath.Text.Contains(Config.WorkRepoFolder, StringComparison.OrdinalIgnoreCase))
-            tbPath.Text = tbPath.Text.Replace(Config.WorkRepoFolder, Config.HomeRepoFolder, StringComparison.OrdinalIgnoreCase);
+        if (AppSettings.Config.AtWork && tbPath.Text.Contains(AppSettings.Config.HomeRepoFolder, StringComparison.OrdinalIgnoreCase))
+            tbPath.Text = tbPath.Text.Replace(AppSettings.Config.HomeRepoFolder, AppSettings.Config.WorkRepoFolder, StringComparison.OrdinalIgnoreCase);
+        else if (!AppSettings.Config.AtWork && tbPath.Text.Contains(AppSettings.Config.WorkRepoFolder, StringComparison.OrdinalIgnoreCase))
+            tbPath.Text = tbPath.Text.Replace(AppSettings.Config.WorkRepoFolder, AppSettings.Config.HomeRepoFolder, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
@@ -832,7 +1037,7 @@ public sealed partial class FileBackupView : UserControl
     void cbOpenExplorerChecked(object sender, RoutedEventArgs e)
     {
         if (!_startupFinished) { return; }
-        Config.ExplorerShell = cbOpenExplorer.IsChecked ?? false;
+        AppSettings.Config.ExplorerShell = cbOpenExplorer.IsChecked ?? false;
     }
 
     /// <summary>
@@ -841,7 +1046,16 @@ public sealed partial class FileBackupView : UserControl
     void cbBackupInitialChecked(object sender, RoutedEventArgs e)
     {
         if (!_startupFinished) { return; }
-        Config.FullInitialBackup = cbBackupInitial.IsChecked ?? false;
+        AppSettings.Config.FullInitialBackup = cbBackupInitial.IsChecked ?? false;
+    }
+
+    /// <summary>
+    /// <see cref="CheckBox"/> event.
+    /// </summary>
+    void cbRandomBackdropChecked(object sender, RoutedEventArgs e)
+    {
+        if (!_startupFinished) { return; }
+        AppSettings.Config.RandomBackdrop = cbRandomBackdrop.IsChecked ?? false;
     }
 
     /// <summary>
@@ -852,7 +1066,7 @@ public sealed partial class FileBackupView : UserControl
         if (!_startupFinished) { return; }
         var cb = sender as ComboBox;
         if (cb != null)
-            Config.ThreadIndex = cb.SelectedIndex; //(int)cb.SelectedValue;
+            AppSettings.Config.ThreadIndex = cb.SelectedIndex; //(int)cb.SelectedValue;
     }
 
     /// <summary>
@@ -863,7 +1077,7 @@ public sealed partial class FileBackupView : UserControl
         if (!_startupFinished) { return; }
         var cb = sender as ComboBox;
         if (cb != null)
-            Config.StaleIndex = cb.SelectedIndex; //(int)cb.SelectedValue;
+            AppSettings.Config.StaleIndex = cb.SelectedIndex; //(int)cb.SelectedValue;
     }
 
     /// <summary>
@@ -874,13 +1088,18 @@ public sealed partial class FileBackupView : UserControl
     /// </summary>
     void FileBackupViewOnSizeChanged(object sender, SizeChangedEventArgs e)
     {
+        if (_debounceTimer == null)
+            _debounceTimer = DispatcherQueue.CreateTimer();
+
         // The resize event will fire many times, so we'll only execute this
         // code after some amount of time has elapsed since the last trigger.
         _debounceTimer?.Debounce(async () =>
         {
             Debug.WriteLine($"[Debounce OnSizeChanged {DateTime.Now.ToString("hh:mm:ss.fff tt")}]");
             if (e.NewSize.Height > 0)
+            {
                 AcrylicRectangle.Height = e.NewSize.Height * 1.15d; // force the scroll so we can see the effect
+            }
 
         }, TimeSpan.FromSeconds(0.5));
     }
@@ -1209,9 +1428,9 @@ public sealed partial class FileBackupView : UserControl
             else
                 baseFolder = Directory.GetCurrentDirectory();
 
-            if (File.Exists(Path.Combine(baseFolder, @".\MRU.xml")))
+            if (File.Exists(Path.Combine(baseFolder, @"MRU.xml")))
             {
-                var data = File.ReadAllText(Path.Combine(baseFolder, @".\MRU.xml"));
+                var data = File.ReadAllText(Path.Combine(baseFolder, @"MRU.xml"));
                 var serializer = new XmlSerializer(typeof(List<MRU>));
                 if (serializer != null)
                 {
@@ -1256,7 +1475,7 @@ public sealed partial class FileBackupView : UserControl
                 var stringWriter = new StringWriter();
                 serializer.Serialize(stringWriter, MostRecent);
                 var applicationData = stringWriter.ToString();
-                File.WriteAllText(Path.Combine(baseFolder, @".\MRU.xml"), applicationData);
+                File.WriteAllText(Path.Combine(baseFolder, @"MRU.xml"), applicationData);
             }
             else
             {
@@ -1292,7 +1511,7 @@ public sealed partial class FileBackupView : UserControl
     }
 
     /// <summary>
-    /// Creates a new <see cref="List{MRU}"/> object.
+    /// Creates a new <see cref="List{MRU}"/> object with example data.
     /// </summary>
     /// <returns><see cref="List{MRU}"/></returns>
     List<MRU> GenerateDefaultMRU()
@@ -1303,7 +1522,7 @@ public sealed partial class FileBackupView : UserControl
             new MRU { Folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), @"source\repos"), Time = DateTime.Now.AddDays(-15), Count = 67000 },
         };
     }
-
+    /*
     /// <summary>
     /// Loads the application settings collection.
     /// </summary>
@@ -1318,9 +1537,9 @@ public sealed partial class FileBackupView : UserControl
             else
                 baseFolder = Directory.GetCurrentDirectory();
 
-            if (File.Exists(Path.Combine(baseFolder, @".\Settings.xml")))
+            if (File.Exists(Path.Combine(baseFolder, @"Settings.xml")))
             {
-                var data = File.ReadAllText(Path.Combine(baseFolder, @".\Settings.xml"));
+                var data = File.ReadAllText(Path.Combine(baseFolder, @"Settings.xml"));
                 var serializer = new XmlSerializer(typeof(Settings));
                 if (serializer != null)
                 {
@@ -1366,7 +1585,7 @@ public sealed partial class FileBackupView : UserControl
                 var stringWriter = new StringWriter();
                 serializer.Serialize(stringWriter, Config);
                 var applicationData = stringWriter.ToString();
-                File.WriteAllText(Path.Combine(baseFolder, @".\Settings.xml"), applicationData);
+                File.WriteAllText(Path.Combine(baseFolder, @"Settings.xml"), applicationData);
             }
             else
             {
@@ -1390,10 +1609,10 @@ public sealed partial class FileBackupView : UserControl
         return new Settings
         {
             Theme = "Dark",
-            AtWork = true,
+            AtWork = false,
             ExplorerShell = true,
             FullInitialBackup = false,
-            StaleIndex = 4,
+            StaleIndex = 6,
             ThreadIndex = Math.Min(ThreadCount.Count - 1, GetProcessorCount() / 4),
             HomeRepoFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), @"source\repos"),
             HomeBufferFolder = @"F:\RepoBackups",
@@ -1401,12 +1620,13 @@ public sealed partial class FileBackupView : UserControl
             WorkBufferFolder = @"D:\RepoBackups",
         };
     }
+    */
     #endregion
 
     #region [Thread-safe UI Helpers]
     void RunOnUI(Action action)
     {
-        _ = DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Normal, () =>
+        _ = DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Normal, () =>
         {
             try { action(); }
             catch (Exception ex) { Debug.WriteLine(ex.Message); }
@@ -1639,7 +1859,7 @@ public sealed partial class FileBackupView : UserControl
     {
         bool whole = false, part1 = false, part2 = false, processCanceled = false;
 
-        Dictionary<string, string> stored = CheckIndexFreshness(title, path, token, StaleCount[Config.StaleIndex]);
+        Dictionary<string, string> stored = CheckIndexFreshness(title, path, token, StaleCount[AppSettings.Config.StaleIndex]);
 
         RemovePreviousBackup(buffer, token);
 
@@ -1662,7 +1882,7 @@ public sealed partial class FileBackupView : UserControl
             using (System.Threading.Timer tmr = new(TimerProcCallback, null, dueTime, period)) // Create the progress timer.
             {
                 Write($"Building index to compare", LogLevel.Info);
-                current = IndexFolder(path, title, token, ThreadCount[Config.ThreadIndex]);
+                current = IndexFolder(path, title, token, ThreadCount[AppSettings.Config.ThreadIndex]);
 
                 Write($"Comparing elements…", LogLevel.Info);
                 var comp = CompareIndexSets(current, stored);
@@ -1784,13 +2004,13 @@ public sealed partial class FileBackupView : UserControl
             Write($"{title} db has no entries, creating new db", LogLevel.Important);
             using (System.Threading.Timer tmr = new(TimerProcCallback, null, dueTime, period)) // Create the progress timer.
             {
-                var result = IndexFolder(path, title, token, ThreadCount[Config.ThreadIndex]);
+                var result = IndexFolder(path, title, token, ThreadCount[AppSettings.Config.ThreadIndex]);
                 if (result.Count > 0)
                 {
                     Write($"Total files inspected: {totalFilesInspected.ToString("#,###,##0")}", LogLevel.Info);
                     SaveIndexDB(title, result);
                     UpdateMRU(path, totalFilesInspected);
-                    if (Config.FullInitialBackup && !processCanceled)
+                    if (AppSettings.Config.FullInitialBackup && !processCanceled)
                     {
                         Write("Performing initial backup, this may take some time", LogLevel.Info);
 
@@ -2247,7 +2467,7 @@ public sealed partial class FileBackupView : UserControl
             }
 
             // Auto-launch Windows file explorer?
-            if (Config.ExplorerShell)
+            if (AppSettings.Config.ExplorerShell)
             {
                 Write($"Showing archive", LogLevel.Info);
                 Thread.Sleep(200);
@@ -2387,7 +2607,7 @@ public sealed partial class FileBackupView : UserControl
                 if (updateIfOld)
                 {
                     Write($"Updating {indexTitle} db", LogLevel.Info);
-                    var result = IndexFolder(path, indexTitle, token, ThreadCount[Config.ThreadIndex]);
+                    var result = IndexFolder(path, indexTitle, token, ThreadCount[AppSettings.Config.ThreadIndex]);
                     SaveIndexDB(indexTitle, result);
                     return result;
                 }
@@ -2455,8 +2675,7 @@ public sealed partial class FileBackupView : UserControl
             if (info.LastWriteTime < DateTime.Now.Subtract(new TimeSpan(days, 0, 0, 0)))
                 Write($"Index db is getting old, you should re-index soon", LogLevel.Info);
 
-            Write($"LastWriteTime => {info.LastWriteTime}", LogLevel.Debug);
-            Write($"Loading {indexTitle}…", LogLevel.Info);
+            Write($"Loading {indexTitle} ({info.LastWriteTime})", LogLevel.Info);
 
             var dict = ReadIntoDictionary(storeDB, Extensions.GetEncoding(storeDB));
 
@@ -2646,6 +2865,149 @@ public sealed partial class FileBackupView : UserControl
         Debug.WriteLine($"> Member name: " + memberName);
         Debug.WriteLine($"> File path..: " + sourceFilePath);
         Debug.WriteLine($"> Line number: " + sourceLineNumber);
+    }
+
+    /// <summary>
+    /// Reset all properties related to a backup cycle.
+    /// </summary>
+    void ResetState()
+    {
+        _lastError = "";
+        Progress = $"…";
+        totalFilesInspected = 0;
+        Messages.Clear();
+        LogMessages.Clear();
+        UpdateProgressBar(0);
+    }
+    #endregion
+
+    #region [Toast Routines]
+    /// <summary>
+    /// Notify user using a <see cref="ToastNotification"/>.
+    /// Supports up to two lines of text and embeds the application image.
+    /// </summary>
+    void ToastImageAndText(string text1, string text2 = "")
+    {
+        try
+        {
+            XmlDocument toastXml = ToastNotificationManager.GetTemplateContent(ToastTemplateType.ToastImageAndText02);
+
+            XmlNodeList stringElements = toastXml.GetElementsByTagName("text");
+
+            stringElements.Item(0).AppendChild(toastXml.CreateTextNode(text1));
+            if (!string.IsNullOrEmpty(text2))
+                stringElements.Item(1).AppendChild(toastXml.CreateTextNode(text2));
+
+            #region [Set image tag]
+            var imgElement = toastXml.GetElementsByTagName("image");
+            // Default <image> properties
+            // ImageElement[x].Attribute[0] = id
+            // ImageElement[x].Attribute[1] = src
+            if (App.IsPackaged)
+                imgElement[0].Attributes[1].NodeValue = $"ms-appdata:///local/Assets/RepoFolderTiny.png";
+            else
+                imgElement[0].Attributes[1].NodeValue = $"file:///{Directory.GetCurrentDirectory().Replace("\\", "/")}/Assets/RepoFolderTiny.png";
+            /*
+              [NOTES]
+              - "ms-appx:///Assets/AppIcon.png" 
+                    Does not seem to work (I've tried setting the asset to Content and Resource with no luck).
+                    This may work with the AppNotificationBuilder, but Win10 does not support AppNotificationBuilder.
+              - "file:///D:/AppIcon.png" 
+                    Does work, however it is read at runtime so if the asset is missing it will only show the text notification.
+              - "ms-appdata:///local/Assets/AppIcon.png"
+                    Would be for packaged apps, I have not tested this.
+              - "https://static.cdn.com/media/someImage.png"
+                    I have not tested this extensively. Early tests did not work.
+            */
+            #endregion
+
+            ToastNotification toast = new ToastNotification(toastXml);
+
+            toast.Activated += ToastOnActivated;
+            toast.Dismissed += ToastOnDismissed;
+            toast.Failed += ToastOnFailed;
+
+            // NOTE: It is critical that you provide the applicationID during CreateToastNotifier().
+            // It is the name that will be used in the action center to group your toasts.
+            var tnm = ToastNotificationManager.CreateToastNotifier("MenuDemo");
+            if (tnm == null)
+            {
+                _logQueue.Enqueue(new LogEntry { Message = $"Could not create ToastNotificationManager.", Method = $"ToastImageAndText", Severity = LogLevel.Warning, Time = DateTime.Now });
+                return;
+            }
+
+            var canShow = tnm.Setting;
+            if (canShow != NotificationSetting.Enabled)
+                _logQueue.Enqueue(new LogEntry { Message = $"Not allowed to show notifications because '{canShow}'.", Method = $"ToastImageAndText", Severity = LogLevel.Warning, Time = DateTime.Now });
+            else
+                tnm.Show(toast);
+
+        }
+        catch (Exception ex)
+        {
+            _logQueue.Enqueue(new LogEntry { Message = $"{ex.Message}", Method = $"ToastImageAndText", Severity = LogLevel.Error, Time = DateTime.Now });
+        }
+    }
+
+    /// <summary>
+    /// [Managing toast notifications in action center]
+    /// https://learn.microsoft.com/en-us/previous-versions/windows/apps/dn631260(v=win.10)
+    /// [The toast template catalog]
+    /// https://learn.microsoft.com/en-us/previous-versions/windows/apps/hh761494(v=win.10)
+    /// [Send a local toast notification from a C# app]
+    /// https://learn.microsoft.com/en-us/windows/apps/design/shell/tiles-and-notifications/send-local-toast?tabs=desktop
+    /// </summary>
+    void ToastOnActivated(ToastNotification sender, object args)
+    {
+        // Handle notification activation
+        if (args is Windows.UI.Notifications.ToastActivatedEventArgs toastActivationArgs)
+        {
+            // Obtain the arguments from the notification
+            Debug.WriteLine(toastActivationArgs.Arguments);
+
+            if (App.WindowsVersion.Major >= 10 && App.WindowsVersion.Build >= 18362)
+            {
+                // Obtain any user input (text boxes, menu selections) from the notification
+                Windows.Foundation.Collections.ValueSet userInput = toastActivationArgs.UserInput;
+
+                // Do something with the user selection.
+                foreach (var item in userInput)
+                {
+                    string? key = item.Key;
+                    object? value = item.Value;
+                    Debug.WriteLine($"ToastKey: '{key}'  ToastValue: '{value}'");
+                }
+            }
+        }
+    }
+    void ToastOnDismissed(ToastNotification sender, ToastDismissedEventArgs args)
+    {
+        _logQueue.Enqueue(new LogEntry { Message = $"Toast Dismissal Reason: {args.Reason}", Method = "ToastOnDismissed", Severity = LogLevel.Info, Time = DateTime.Now });
+    }
+    void ToastOnFailed(ToastNotification sender, ToastFailedEventArgs args)
+    {
+        _logQueue.Enqueue(new LogEntry { Message = $"Toast Failed: {args.ErrorCode.Message}", Method = "ToastOnFailed", Severity = LogLevel.Warning, Time = DateTime.Now });
+    }
+
+    /// <summary>
+    /// Shows use of the ToastNotificationManager.History feature.
+    /// </summary>
+    void ShowToastHistory()
+    {
+        try
+        {
+            var notes = ToastNotificationManager.History.GetHistory("MenuDemo");
+            foreach (var item in notes)
+            {
+                // Sample one of the fields...
+                var et = item.ExpirationTime;
+                Write($"Expires: {et}", LogLevel.Info);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logQueue.Enqueue(new LogEntry { Message = $"{ex.Message}", Method = $"ShowToastHistory", Severity = LogLevel.Error, Time = DateTime.Now });
+        }
     }
     #endregion
 
@@ -2879,19 +3241,6 @@ public sealed partial class FileBackupView : UserControl
 
     #region [Miscellaneous]
     /// <summary>
-    /// Reset all properties related to a backup cycle.
-    /// </summary>
-    void ResetState()
-    {
-        _lastError = "";
-        Progress = $"…";
-        totalFilesInspected = 0;
-        Messages.Clear();
-        LogMessages.Clear();
-        UpdateProgressBar(0);
-    }
-
-    /// <summary>
     /// Determine internally referenced assemblies.
     /// This does not include loaded <see cref="ProcessModule"/>s.
     /// </summary>
@@ -2925,12 +3274,32 @@ public sealed partial class FileBackupView : UserControl
     }
 
     /// <summary>
+    /// Test for our <see cref="PackageManagerHelper"/>.
+    /// </summary>
+    void LogPackages()
+    {
+        Task.Run(delegate ()
+        {
+            var packages = PackageManagerHelper.GatherPackages();
+            foreach (var package in packages)
+            {
+                try
+                {
+                    string description = $"{package.DisplayName} [{package.InstalledLocation.Path}]";
+                    Logger.WriteLine(description, LogLevel.Debug);
+                }
+                catch (Exception) { /* FileNotFound exceptions may occur for some installed locations. */ }
+            }
+        });
+    }
+
+    /// <summary>
     /// Walk through the application's theme dictionaries and collect all the color values.
     /// </summary>
     /// <returns><see cref="List{NamedColor}"/></returns>
-    List<NamedColor> GatherScopedColors()
+    List<Models.NamedColor> GatherScopedColors()
     {
-        List<NamedColor> colorGroup = new();
+        List<Models.NamedColor> colorGroup = new();
         var dictionaries = Application.Current.Resources.MergedDictionaries;
 
         if (dictionaries == null)
@@ -2955,7 +3324,7 @@ public sealed partial class FileBackupView : UserControl
                             {
                                 var tmpClr = Extensions.GetColorFromHexString(clrTest);
                                 if (tmpClr != null)
-                                    colorGroup.Add(new NamedColor { KeyName = $"{element.Key}", HexCode = clrTest, Color = (Windows.UI.Color)tmpClr });
+                                    colorGroup.Add(new Models.NamedColor { KeyName = $"{element.Key}", HexCode = clrTest, Color = (Windows.UI.Color)tmpClr });
                             }
                         }
                     }
@@ -2966,135 +3335,268 @@ public sealed partial class FileBackupView : UserControl
         return colorGroup;
     }
 
-	/// <summary>
-	/// Notify user using a <see cref="ToastNotification"/>.
-    /// Supports up to two lines of text and embeds the application image.
-	/// </summary>
-	void ToastImageAndText(string text1, string text2 = "")
-	{
-        try
-        {
-            XmlDocument toastXml = ToastNotificationManager.GetTemplateContent(ToastTemplateType.ToastImageAndText02);
-
-            XmlNodeList stringElements = toastXml.GetElementsByTagName("text");
-
-            stringElements.Item(0).AppendChild(toastXml.CreateTextNode(text1));
-            if (!string.IsNullOrEmpty(text2))
-                stringElements.Item(1).AppendChild(toastXml.CreateTextNode(text2));
-
-            #region [Set image tag]
-            var imgElement = toastXml.GetElementsByTagName("image");
-            // Default <image> properties
-            // ImageElement[x].Attribute[0] = id
-            // ImageElement[x].Attribute[1] = src
-            if (App.IsPackaged)
-                imgElement[0].Attributes[1].NodeValue = $"ms-appdata:///local/Assets/RepoFolderTiny.png";
-            else
-                imgElement[0].Attributes[1].NodeValue = $"file:///{Directory.GetCurrentDirectory().Replace("\\", "/")}/Assets/RepoFolderTiny.png";
-            /*
-              [NOTES]
-              - "ms-appx:///Assets/AppIcon.png" 
-                    Does not seem to work (I've tried setting the asset to Content and Resource with no luck).
-                    This may work with the AppNotificationBuilder, but Win10 does not support AppNotificationBuilder.
-              - "file:///D:/AppIcon.png" 
-                    Does work, however it is read at runtime so if the asset is missing it will only show the text notification.
-              - "ms-appdata:///local/Assets/AppIcon.png"
-                    Would be for packaged apps, I have not tested this.
-              - "https://static.cdn.com/media/someImage.png"
-                    I have not tested this extensively. Early tests did not work.
-            */
-            #endregion
-
-            ToastNotification toast = new ToastNotification(toastXml);
-
-            toast.Activated += ToastOnActivated;
-            toast.Dismissed += ToastOnDismissed;
-            toast.Failed += ToastOnFailed;
-
-            // NOTE: It is critical that you provide the applicationID during CreateToastNotifier().
-            // It is the name that will be used in the action center to group your toasts.
-            var tnm = ToastNotificationManager.CreateToastNotifier("MenuDemo");
-            if (tnm == null)
-            {
-                _logQueue.Enqueue(new LogEntry { Message = $"Could not create ToastNotificationManager.", Method = $"ToastImageAndText", Severity = LogLevel.Warning, Time = DateTime.Now });
-                return;
-            }
-
-            var canShow = tnm.Setting;
-            if (canShow != NotificationSetting.Enabled)
-                _logQueue.Enqueue(new LogEntry { Message = $"Not allowed to show notifications because '{canShow}'.", Method = $"ToastImageAndText", Severity = LogLevel.Warning, Time = DateTime.Now });
-            else
-                tnm.Show(toast);
-
-        }
-        catch (Exception ex)
-        {
-			_logQueue.Enqueue(new LogEntry { Message = $"{ex.Message}", Method = $"ToastImageAndText", Severity = LogLevel.Error, Time = DateTime.Now });
-		}
-	}
-
-
-
     /// <summary>
-    /// [Managing toast notifications in action center]
-    /// https://learn.microsoft.com/en-us/previous-versions/windows/apps/dn631260(v=win.10)
-    /// [The toast template catalog]
-    /// https://learn.microsoft.com/en-us/previous-versions/windows/apps/hh761494(v=win.10)
-    /// [Send a local toast notification from a C# app]
-    /// https://learn.microsoft.com/en-us/windows/apps/design/shell/tiles-and-notifications/send-local-toast?tabs=desktop
+    /// Returns a random selection from <see cref="Microsoft.UI.Colors"/>.
+    /// We are interested in the runtime <see cref="System.Reflection.PropertyInfo"/>
+    /// from the <see cref="Microsoft.UI.Colors"/> sealed class. We will only add a
+    /// property to our collection if it is of type <see cref="Windows.UI.Color"/>.
     /// </summary>
-    void ToastOnActivated(ToastNotification sender, object args)
+    /// <returns><see cref="List{T}"/></returns>
+    public static List<Models.NamedColor>? GetWinUIColorList()
     {
-        // Handle notification activation
-        if (args is Windows.UI.Notifications.ToastActivatedEventArgs toastActivationArgs)
+        List<Models.NamedColor>? colors = new();
+        StringBuilder hex = new StringBuilder();
+
+        #region [Loop through the color properties of the Microsoft.UI.Color sealed class]
+        foreach (var color in typeof(Microsoft.UI.Colors).GetRuntimeProperties())
         {
-            // Obtain the arguments from the notification
-            Debug.WriteLine(toastActivationArgs.Arguments);
-
-            if (App.WindowsVersion.Major >= 10 && App.WindowsVersion.Build >= 18362)
+            // We must check the property type before assuming the explicit cast.
+            if (color != null && color.PropertyType == typeof(Windows.UI.Color))
             {
-                // Obtain any user input (text boxes, menu selections) from the notification
-                Windows.Foundation.Collections.ValueSet userInput = toastActivationArgs.UserInput;
-
-                // Do something with the user selection.
-                foreach (var item in userInput)
+                try
                 {
-                    string? key = item.Key;
-                    object? value = item.Value;
-                    Debug.WriteLine($"ToastKey: '{key}'  ToastValue: '{value}'");
+                    var c = (Windows.UI.Color?)color.GetValue(null);
+                    if (c != null)
+                    {
+                        hex.Clear();
+                        hex.AppendFormat("{0:X2}", c?.A); // always FF
+                        hex.AppendFormat("{0:X2}", c?.R);
+                        hex.AppendFormat("{0:X2}", c?.G);
+                        hex.AppendFormat("{0:X2}", c?.B);
+                        colors.Add(new Models.NamedColor() 
+                        { 
+                            KeyName = $"{color.Name}", 
+                            HexCode = $"{hex}", 
+                            Color = c!= null ? (Windows.UI.Color)c : Windows.UI.Color.FromArgb(255,255,0,0) 
+                        });
+                    }
+                }
+                catch (Exception)
+                {
+                    Debug.WriteLine($"Failed to get the value for '{color.Name}'");
                 }
             }
+            else
+            {
+                Debug.WriteLine($"PropertyType => {color?.PropertyType}");
+            }
         }
-    }
-    void ToastOnDismissed(ToastNotification sender, ToastDismissedEventArgs args)
-    {
-        _logQueue.Enqueue(new LogEntry { Message = $"Toast Dismissal Reason: {args.Reason}", Method = "ToastOnDismissed", Severity = LogLevel.Info, Time = DateTime.Now });
-    }
-    void ToastOnFailed(ToastNotification sender, ToastFailedEventArgs args)
-    {
-        _logQueue.Enqueue(new LogEntry { Message = $"Toast Failed: {args.ErrorCode.Message}", Method = "ToastOnFailed", Severity = LogLevel.Warning, Time = DateTime.Now });
+        #endregion
+
+        #region [Loop through the public static fields of the Microsoft.UI.Color sealed class]
+        //foreach (FieldInfo fieldInfo in typeof(Microsoft.UI.Colors).GetRuntimeFields())
+        //{
+        //    if (fieldInfo.IsPublic && fieldInfo.IsStatic)
+        //    {
+        //        Debug.WriteLine($"FieldName: {fieldInfo.Name}");
+        //        if (fieldInfo.FieldType == typeof(Windows.UI.Color))
+        //        {
+        //            try { var color = (Windows.UI.Color)fieldInfo.GetValue(null); }
+        //            catch (Exception ex) { Debug.WriteLine($"Failed to get the value for '{fieldInfo.Name}'"); }
+        //        }
+        //        else { Debug.WriteLine($"FieldType => {fieldInfo.FieldType}"); }
+        //    }
+        //}
+        #endregion
+
+        return colors;
     }
 
     /// <summary>
-    /// Shows use of the ToastNotificationManager.History feature.
+    /// This should be tied to an event which offers <see cref="KeyRoutedEventArgs"/>.
     /// </summary>
-    void ShowToastHistory()
-	{
-		try
-		{
-			var notes = ToastNotificationManager.History.GetHistory("MenuDemo");
-			foreach (var item in notes)
-			{
-				// Sample one of the fields...
-				var et = item.ExpirationTime;
-                Write($"Expires: {et}", LogLevel.Info);
-			}
-		}
-		catch (Exception ex)
-		{
-			_logQueue.Enqueue(new LogEntry { Message = $"{ex.Message}", Method = $"ShowToastHistory", Severity = LogLevel.Error, Time = DateTime.Now });
-		}
-	}
+    async void TestNoticeDialog(object sender, KeyRoutedEventArgs e)
+    {
+        // Setup the dialog.
+        var dialog = new SaveCloseDiscardDialog(
+         saveAndExitAction: async () =>
+         {
+             Write($"Save and exit action", LogLevel.Debug);
+             await Task.Delay(250);
+         },
+         discardAndExitAction: () =>
+         {
+             Write($"Discard and exit action", LogLevel.Debug);
+         },
+         cancelAction: () =>
+         {
+             Write($"Cancel action", LogLevel.Debug);
+             e.Handled = true;
+         },
+         content: "Would you like to save your changes?");
+
+        // Show the dialog.
+        var result = await DialogManager.OpenDialogAsync(dialog, awaitPreviousDialog: false);
+
+        // Deal with the result.
+        if (result == null)
+        {
+            Write($"Result is null.", LogLevel.Debug);
+            e.Handled = true;
+        }
+        else if (result == ContentDialogResult.Primary)
+        {
+            Write($"You chose 'Save'", LogLevel.Debug);
+        }
+        else if (result == ContentDialogResult.Secondary)
+        {
+            Write($"You chose 'Discard'", LogLevel.Debug);
+        }
+        else if (result == ContentDialogResult.None)
+        {
+            Write($"You chose 'Close'", LogLevel.Debug);
+        }
+
+        if (e.Handled && !dialog.IsAborted)
+            tbPath.Focus(FocusState.Programmatic);
+    }
+
+    /// <summary>
+    /// This should be tied to an event which offers <see cref="KeyRoutedEventArgs"/>.
+    /// </summary>
+    async void TestGenericDialog(object sender, KeyRoutedEventArgs e)
+    {
+        string primaryText = "Yes";
+        string secondaryText = "No";
+        string cancelText = "Cancel";
+
+        // Setup the dialog.
+        var dialog = new GenericDialog(
+         primaryText, yesAction: () =>
+         {
+             Write($"Running '{primaryText}' action", LogLevel.Debug);
+         },
+         secondaryText, noAction: () =>
+         {
+             Write($"Running '{secondaryText}' action", LogLevel.Debug);
+         },
+         cancelText, cancelAction: () =>
+         {
+             Write($"Running '{cancelText}' action", LogLevel.Debug);
+             e.Handled = true;
+         },
+         title: "Question", content: "Are you sure?");
+
+        // Show the dialog.
+        var result = await DialogManager.OpenDialogAsync(dialog, awaitPreviousDialog: false);
+
+        // Deal with the result.
+        if (result == null)
+        {
+            Write($"Result is null.", LogLevel.Debug);
+            e.Handled = true;
+        }
+        else if (result == ContentDialogResult.Primary)
+        {
+            Write($"You chose '{primaryText}'", LogLevel.Debug);
+        }
+        else if (result == ContentDialogResult.Secondary)
+        {
+            Write($"You chose '{secondaryText}'", LogLevel.Debug);
+        }
+        else if (result == ContentDialogResult.None)
+        {
+            Write($"You chose '{cancelText}'", LogLevel.Debug);
+        }
+
+        if (e.Handled && !dialog.IsAborted)
+            tbPath.Focus(FocusState.Programmatic);
+    }
+    #endregion
+
+    #region [Custom Input Control Events]
+    void TextInputOnDismissKeyDown(object sender, RoutedEventArgs e)
+    {
+        Debug.WriteLine($"[TextInputOnDismissKeyDown]");
+        InputStoryboardHide.Begin();
+    }
+
+    void TextInputOnKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        Debug.WriteLine($"[TextInputOnKeyDown] => {e.Key}");
+    }
+
+    void TextInputOnButtonClicked(object sender, Controls.TextInputEventArgs e)
+    {
+        bool match = false;
+
+        // We will receive our custom event args (TextInputEventArgs) once the button is clicked.
+        Debug.WriteLine($"[TextInputOnButtonClicked] => {e.Data}");
+
+        if (!string.IsNullOrEmpty(e.Data))
+        {
+            switch (e.Data)
+            {
+                case string s when s.StartsWith("device"):
+                    match = true;
+                    Write($"Device interface count: {_dwh?.DeviceInterfacesOutputList.Count}", LogLevel.Info);
+                    //Logger?.WriteLinesAsync(_dwh.DeviceInterfacesOutputList, LogLevel.Debug);
+                    break;
+                case string s when s.StartsWith("log-device"):
+                    match = true;
+                    Write($"Saving {_dwh?.DeviceInterfacesOutputList.Count} devices", LogLevel.Info);
+                    Logger?.WriteLinesAsync(_dwh.DeviceInterfacesOutputList, LogLevel.Debug);
+                    break;
+                case string s when s.StartsWith("config"):
+                    match = true;
+                    Write($"{AppSettings.Config.ToJsonObject()}", LogLevel.Info);
+                    break;
+                case string s when s.StartsWith("total"):
+                    Write($"{InspectionCount}", LogLevel.Info);
+                    break;
+                case string s when s.StartsWith("count"):
+                    match = true;
+                    Write($"{totalFilesInspected}", LogLevel.Info);
+                    break;
+                default:
+                    match = false;
+                    Write($"Input did not match any known command", LogLevel.Warning);
+                    break;
+            }
+        }
+
+        // We can get the control using a direct approach...
+        TextInputControl? tc = (TextInputControl?)spInputControl.FindName("inputControl");
+
+        // Or we can iterate over each child until we find what we want...
+        foreach (var element in spInputControl.GetChildren())
+        {
+            if (element is TextInputControl tic)
+            {
+                var controlHeight = tic.GetHeight();
+                //Write($"Control height is {controlHeight}", LogLevel.Debug);
+
+                if (match)
+                {
+                    tic.ClearInputData();
+                    tic.Focus();
+                }
+                else
+                {
+                    tic.SetInputData(e.Data, 50, false);
+                    tic.Focus(true);
+                }
+
+                break; // We're interested in only one, but you could have multiple.
+            }
+        }
+    }
+
+    /// <summary>
+    /// Animation event (shown)
+    /// </summary>
+    void InputStoryboardShowOnCompleted(object? sender, object e)
+    {
+        inputControl.Focus(FocusState.Programmatic);
+    }
+
+    /// <summary>
+    /// Animation event (hidden)
+    /// </summary>
+    void InputStoryboardHideOnCompleted(object? sender, object e)
+    {
+        spInputControl.Visibility = Visibility.Collapsed;
+    }
     #endregion
 }
 

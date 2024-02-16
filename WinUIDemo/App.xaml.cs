@@ -36,6 +36,7 @@ using Windows.System.Profile;
 using Windows.UI.ViewManagement;
 
 using WinUIDemo.ViewModels;
+using Windows.UI.Popups;
 
 namespace WinUIDemo;
 
@@ -43,11 +44,22 @@ namespace WinUIDemo;
 /// Our main <see cref="Microsoft.UI.Xaml.Application"/> wrapper.
 /// The purpose of this application was to not use any 3rd party libs, 
 /// so you'll find methods such as the home-brew service getter et. al.
+/// 
+/// WinUI is the modern native UI platform for Windows with two active generations:
+///  - WinUI3: The latest, 3rd generation of WinUI that ships the entire WinUI stack decoupled from the operating system as a part of the Windows App SDK.
+///	 - WinUI2: The previous generation of the WinUI stack for UWP apps, consisting of a XAML and Visual Layer built directly into the Windows 10 operating system, and a controls library built on top of the OS, delivered via NuGet, and hosted at this repository.WinUI 2 will continue to be supported with bug, reliability, and security fixes.
+///
+/// For a detailed look on the difference between WinUI 2 and 3, view the comparison table: https://learn.microsoft.com/en-us/windows/apps/winui/#comparison-of-winui-3-and-winui-2
+/// WinUI3 is specifically for the Windows App SDK.
+/// WinUI2 is specifically for UWP
+/// 
+/// To learn more about WinUI3, go here: https://learn.microsoft.com/en-us/windows/apps/winui/winui3/
 /// </summary>
 public partial class App : Application
 {
     #region [Properties]
     private Window? m_window;
+    private static bool m_PackagedLogging = false;
     private static UISettings m_UISettings = new UISettings();
     private static EasClientDeviceInformation m_deviceInfo = new EasClientDeviceInformation();
     public static event Action<string> OnWindowClosing = (msg) => { };
@@ -55,6 +67,8 @@ public partial class App : Application
     public static Dictionary<string, string> MachineAndUserVars = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
     public static Version WindowsVersion => Extensions.GetWindowsVersionUsingAnalyticsInfo();
     public static FrameworkElement? MainRoot { get; private set; } // For alert dialogs, et al.
+    public static string? PreferredUserLanguage { get; private set; } // For resource preference.
+    public static string? AppName { get; private set; } // For file system.
     public static string? AppBase { get; private set; } // For pathing.
     public static string? MachineID { get; private set; } // For identifying the client machine.
     public static string? SessionID { get; private set; } // For attaching a unique ID to the life-cycle.
@@ -145,6 +159,7 @@ public partial class App : Application
         AppDomain.CurrentDomain.AssemblyResolve += CurrentDomainOnAssemblyResolve;
         TaskScheduler.UnobservedTaskException += OnUnobservedTaskException;
         AppBase = AppDomain.CurrentDomain.SetupInformation.ApplicationBase;
+        AppName = Assembly.GetExecutingAssembly().GetName().Name;
 
         // Is there more than one of us?
         InstanceMutex = new Mutex(true, Assembly.GetExecutingAssembly().GetName().Name, out bool isNew);
@@ -193,18 +208,22 @@ public partial class App : Application
         GatherEnvironment();
 
         this.InitializeComponent();
+
+        // https://learn.microsoft.com/en-us/windows/windows-app-sdk/api/winrt/microsoft.ui.xaml.application.focusvisualkind?view=windows-app-sdk-1.3
+        this.FocusVisualKind = FocusVisualKind.Reveal;
     }
 
-    /// <summary>
-    /// Our core setup point, invoked when the application is launched.
-    /// </summary>
-    /// <param name="args">Details about the launch request and process.</param>
+    /// <inheritdoc />
     protected override void OnLaunched(Microsoft.UI.Xaml.LaunchActivatedEventArgs args)
     {
+        if (m_PackagedLogging)
+            Task.Run(Support.PackagedLoggingService.InitializeFileSystemLoggingAsync);
+
         // Determining passed arguments
         string[] argsAlt = Environment.GetCommandLineArgs();
 
         // This is currently a bug. https://github.com/microsoft/microsoft-ui-xaml/issues/3368
+        // These arguments are believed to be passed when activated by Toast launching.
         if (args.Arguments.Length > 0)
         {
             if (args.Arguments.Contains("-"))
@@ -266,6 +285,19 @@ public partial class App : Application
                 App.SettingsHelper.Save<string>("StartTime", $"{DateTime.Now.ToJsonFriendlyFormat()}");
         }
         #endregion
+
+        if (m_PackagedLogging)
+            Support.PackagedLoggingService.Log($"[{nameof(App)}] Started.  MachineID: {MachineID}.  Argument count: {argsAlt.Length}.");
+
+        try
+        {
+            PreferredUserLanguage = Windows.Globalization.ApplicationLanguages.Languages.FirstOrDefault(); // "en-US"
+        }
+        catch (Exception ex)
+        {
+            if (m_PackagedLogging)
+                Support.PackagedLoggingService.Log($"Windows.Globalization.ApplicationLanguages threw exception: {ex.Message}");
+        }
     }
 
     #region [Helper methods]
@@ -319,7 +351,12 @@ public partial class App : Application
             else
                 appWindow.SetIcon(System.IO.Path.Combine(System.IO.Directory.GetCurrentDirectory(), iconName));
         }
-        catch (Exception ex) { Debug.WriteLine($"{MethodBase.GetCurrentMethod()?.Name}: {ex.Message}"); }
+        catch (Exception ex) 
+        { 
+            Debug.WriteLine($"{MethodBase.GetCurrentMethod()?.Name}: {ex.Message}");
+            if (m_PackagedLogging)
+                Support.PackagedLoggingService.LogException(ex);
+        }
     }
 
     /// <summary>
@@ -340,7 +377,12 @@ public partial class App : Application
                 appWindow.Move(CenteredPosition);
             }
         }
-        catch (Exception ex) { Debug.WriteLine($"{MethodBase.GetCurrentMethod()?.Name}: {ex.Message}"); }
+        catch (Exception ex) 
+        { 
+            Debug.WriteLine($"{MethodBase.GetCurrentMethod()?.Name}: {ex.Message}");
+            if (m_PackagedLogging)
+                Support.PackagedLoggingService.LogException(ex);
+        }
     }
 
 	/// <summary>
@@ -362,19 +404,17 @@ public partial class App : Application
 	}
 
 	/// <summary>
-	/// Returns the AssemblyVersion, not the FileVersion.
+	/// Test method for side-loading of library objects using the <see cref="Assembly.GetExportedTypes()"/>.
+	/// Most base types, such as <see cref="ZoomMode"/>, will expose an 
+    /// <see cref="IComparable"/>, <see cref="IConvertible"/> and <see cref="IFormattable"/>.
 	/// </summary>
-	public static Version GetCurrentAssemblyVersion()
-    {
-        return System.Reflection.Assembly.GetExecutingAssembly().GetName().Version ?? new Version();
-    }
-
-    /// <summary>
-    /// Test method for side-loading of library objects using the <see cref="Assembly.GetExportedTypes()"/>.
-    /// Most base types, such as <see cref="ZoomMode"/>, will expose an <see cref="IComparable"/>, <see cref="IConvertible"/> and <see cref="IFormattable"/>.
-    /// </summary>
-    /// <param name="dllPath"></param>
-    public static Dictionary<string, Microsoft.UI.Composition.IAnimationObject> GetExportedInterfaces(string dllPath = "")
+	/// <remarks>
+	/// In this example we will look into "Microsoft.WinUI.dll" for all types that support 
+    /// <see cref="Microsoft.UI.Composition.IAnimationObject"/> and are not generics. We will 
+    /// then use the <see cref="Assembly.CreateInstance"/> to add them to the evaluator dictionary.
+	/// </remarks>
+	/// <param name="dllPath"></param>
+	public static Dictionary<string, Microsoft.UI.Composition.IAnimationObject> GetExportedInterfaces(string dllPath = "")
     {
         Dictionary<string, Microsoft.UI.Composition.IAnimationObject> evaluators = new();
         
@@ -575,6 +615,9 @@ public partial class App : Application
         catch (Exception ex)
         {
             Debug.WriteLine($"GetExportedInterfaces: {ex.Message}", $"{nameof(App)}");
+
+            if (m_PackagedLogging)
+                Support.PackagedLoggingService.LogException(ex);
         }
 
         return evaluators;
@@ -594,6 +637,15 @@ public partial class App : Application
     public static string? GetCurrentAssemblyName()
     {
         return System.Reflection.MethodBase.GetCurrentMethod()?.DeclaringType?.Assembly.FullName;
+        // return System.Reflection.Assembly.GetExecutingAssembly().GetName().Name;
+    }
+
+    /// <summary>
+    /// Returns the AssemblyVersion, not the FileVersion.
+    /// </summary>
+    public static Version GetCurrentAssemblyVersion()
+    {
+        return System.Reflection.Assembly.GetExecutingAssembly().GetName().Version ?? new Version();
     }
 
     /// <summary>
@@ -761,7 +813,12 @@ public partial class App : Application
             await bitmapImage.SetSourceAsync(content);
             return bitmapImage;
         }
-        catch (Exception) { return null; }
+        catch (Exception ex) 
+        {
+            if (m_PackagedLogging)
+                Support.PackagedLoggingService.LogException(ex);
+            return null; 
+        }
     }
 
     static Windows.System.Display.DisplayRequest? appDisplayRequest;
@@ -777,13 +834,16 @@ public partial class App : Application
             try
             {
                 if (appDisplayRequest == null)
-                {
                     appDisplayRequest = new Windows.System.Display.DisplayRequest();
-                }
+
                 appDisplayRequest.RequestActive();
                 isDisplayRequestActive = true;
             }
-            catch (Exception) { }
+            catch (Exception ex) 
+            {
+                if (m_PackagedLogging)
+                    Support.PackagedLoggingService.LogException(ex);
+            }
         }
     }
     #endregion
@@ -797,12 +857,18 @@ public partial class App : Application
     void CurrentDomainFirstChanceException(object? sender, System.Runtime.ExceptionServices.FirstChanceExceptionEventArgs e)
     {
         Debug.WriteLine($"First chance exception: {e.Exception}");
+
+        if (m_PackagedLogging)
+            Support.PackagedLoggingService.LogException(e.Exception);
     }
 
     void CurrentDomainUnhandledException(object sender, System.UnhandledExceptionEventArgs e)
     {
         Exception? ex = e.ExceptionObject as Exception;
         Debug.WriteLine($"Thread exception of type {ex?.GetType()}: {ex}");
+
+        if (m_PackagedLogging)
+            Support.PackagedLoggingService.LogException(ex);
     }
 
     /// <summary>
@@ -812,6 +878,10 @@ public partial class App : Application
     void OnUnobservedTaskException(object? sender, UnobservedTaskExceptionEventArgs e)
     {
         Debug.WriteLine($">> OnUnobservedTaskException: {e.Exception}");
+
+        if (m_PackagedLogging)
+            Support.PackagedLoggingService.LogException(e.Exception);
+
         e.SetObserved(); // suppress and handle manually
     }
 
@@ -824,7 +894,6 @@ public partial class App : Application
     Assembly? CurrentDomainOnAssemblyResolve(object? sender, ResolveEventArgs args)
     {
         Debug.WriteLine($"Inside AssemblyResolve with {args.Name}");
-        //Inside AssemblyResolve with System.Private.CoreLib.XmlSerializers, Version=6.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e, processorArchitecture=AMD64
 
         if (args.Name.StartsWith("SQLite"))
         {
@@ -851,9 +920,12 @@ public partial class App : Application
                 !args.LoadedAssembly.FullName.Contains("Microsoft.GeneratedCode"))
                 Debug.WriteLine($"Location={args.LoadedAssembly.Location}");
         }
-        catch (NotSupportedException)
+        catch (NotSupportedException ex)
         {
             Debug.WriteLine($"Name={args.LoadedAssembly.FullName}: UNKNOWN LOCATION");
+
+            if (m_PackagedLogging)
+                Support.PackagedLoggingService.LogException(ex);
         }
     }
 
@@ -887,6 +959,7 @@ public partial class App : Application
             if (ServicesHost.Count == 0)
             {
                 ServicesHost?.Add(new MainViewModel());
+                ServicesHost?.Add(new SettingsManager());
                 ServicesHost?.Add(new FileLogger(System.IO.Path.Combine(FileLogger.GetRoot(), "Logs"), LogLevel.Debug));
             }
 
@@ -902,6 +975,10 @@ public partial class App : Application
         catch (Exception ex)
         {
             Debug.WriteLine($"{MethodBase.GetCurrentMethod()?.Name}: {ex.Message}");
+
+            if (m_PackagedLogging)
+                Support.PackagedLoggingService.LogException(ex);
+
             return null;
         }
     }
@@ -921,6 +998,12 @@ public partial class App : Application
         Windows.System.ProcessorArchitecture ppa = Windows.ApplicationModel.Package.Current.Id.Architecture;
     }
 
+    /// <summary>
+    /// EnvironmentVariableTarget has three options:
+    ///     1) Machine
+    ///     2) Process
+    ///     3) User
+    /// </summary>
     void GatherEnvironment()
     {
         // Get the environment variables.
@@ -952,7 +1035,98 @@ public partial class App : Application
         catch (Exception ex)
         {
             Debug.WriteLine($"Exception while getting the environment variables for target '{target}': {ex.Message}");
+
+            if (m_PackagedLogging)
+                Support.PackagedLoggingService.LogException(ex);
+
             return new Hashtable(); // HashTable inherits from IDictionary
+        }
+    }
+    #endregion
+
+    #region [Dialog Helpers]
+    /// <summary>
+    /// The <see cref="Windows.UI.Popups.MessageDialog"/> does not look as nice as the
+    /// <see cref="Microsoft.UI.Xaml.Controls.ContentDialog"/> and is not part of the native Microsoft.UI.Xaml.Controls.
+    /// The <see cref="Windows.UI.Popups.MessageDialog"/> offers the <see cref="Windows.UI.Popups.UICommandInvokedHandler"/> 
+    /// callback, but this could be replaced with actions. Both can be shown asynchronously.
+    /// </summary>
+    /// <remarks>
+    /// You'll need to call <see cref="WinRT.Interop.InitializeWithWindow.Initialize"/> when using the <see cref="Windows.UI.Popups.MessageDialog"/>,
+    /// because the <see cref="Microsoft.UI.Xaml.XamlRoot"/> does not exist and an owner must be defined.
+    /// </remarks>
+    public static async Task ShowMessageBox(string title, string message, string primaryText, string cancelText)
+    {
+        // Create the dialog.
+        var messageDialog = new MessageDialog($"{message}");
+        messageDialog.Title = title;
+        messageDialog.Commands.Add(new UICommand($"{primaryText}", new UICommandInvokedHandler(DialogDismissedHandler)));
+        messageDialog.Commands.Add(new UICommand($"{cancelText}", new UICommandInvokedHandler(DialogDismissedHandler)));
+        messageDialog.DefaultCommandIndex = 1;
+        // We must initialize the dialog with an owner.
+        WinRT.Interop.InitializeWithWindow.Initialize(messageDialog, App.WindowHandle);
+        // Show the message dialog. Our DialogDismissedHandler will deal with what selection the user wants.
+        await messageDialog.ShowAsync();
+
+        // We could force the result in a separate timer...
+        //DialogDismissedHandler(new UICommand("time-out"));
+    }
+
+    /// <summary>
+    /// Callback for the selected option from the user.
+    /// </summary>
+    static void DialogDismissedHandler(IUICommand command)
+    {
+        Debug.WriteLine($"UICommand.Label => {command.Label}");
+    }
+
+    /// <summary>
+    /// The <see cref="Microsoft.UI.Xaml.Controls.ContentDialog"/> looks much better than the
+    /// <see cref="Windows.UI.Popups.MessageDialog"/> and is part of the native Microsoft.UI.Xaml.Controls.
+    /// The <see cref="Microsoft.UI.Xaml.Controls.ContentDialog"/> does not offer a <see cref="Windows.UI.Popups.UICommandInvokedHandler"/>
+    /// callback, but in this example was replaced with actions. Both can be shown asynchronously.
+    /// </summary>
+    /// <remarks>
+    /// There is no need to call <see cref="WinRT.Interop.InitializeWithWindow.Initialize"/> when using the <see cref="Microsoft.UI.Xaml.Controls.ContentDialog"/>,
+    /// but a <see cref="Microsoft.UI.Xaml.XamlRoot"/> must be defined since it inherits from <see cref="Microsoft.UI.Xaml.Controls.Control"/>.
+    /// </remarks>
+    public static async Task ShowDialogBox(string title, string message, string primaryText, string cancelText, Action? onPrimary, Action? onCancel)
+    {
+        //Windows.UI.Popups.IUICommand defaultCommand = new Windows.UI.Popups.UICommand("OK");
+
+        // NOTE: Content dialogs will automatically darken the background.
+        ContentDialog contentDialog = new ContentDialog()
+        {
+            Title = title,
+            PrimaryButtonText = primaryText,
+            CloseButtonText = cancelText,
+            Content = new TextBlock()
+            {
+                Text = message,
+                FontSize = (double)App.Current.Resources["FontSizeTwo"],
+                FontFamily = (FontFamily)App.Current.Resources["ScanLineFont"],
+                TextWrapping = TextWrapping.Wrap
+            },
+            XamlRoot = App.MainRoot?.XamlRoot,
+            RequestedTheme = App.MainRoot?.ActualTheme ?? ElementTheme.Default
+        };
+
+        ContentDialogResult result = await contentDialog.ShowAsync();
+
+        switch (result)
+        {
+            case ContentDialogResult.Primary:
+                onPrimary?.Invoke();
+                break;
+            //case ContentDialogResult.Secondary:
+            //    onSecondary?.Invoke();
+            //    break;
+            case ContentDialogResult.None: // Cancel
+                onCancel?.Invoke();
+                break;
+            default:
+                Debug.WriteLine($"Dialog result not defined.");
+                break;
         }
     }
     #endregion

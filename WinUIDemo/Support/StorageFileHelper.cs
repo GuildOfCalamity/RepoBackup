@@ -6,6 +6,7 @@ using Windows.ApplicationModel;
 using Windows.Storage;
 using Windows.Storage.Search;
 using Windows.Storage.Streams;
+using static System.Net.Mime.MediaTypeNames;
 
 namespace WinUIDemo;
 
@@ -42,8 +43,16 @@ public static class StorageFileHelper
             throw new ArgumentNullException(nameof(fileName));
         }
 
-        var folder = ApplicationData.Current.LocalFolder;
-        return folder.WriteTextToFileAsync(text, fileName, options);
+        if (App.IsPackaged)
+        {
+            var folder = ApplicationData.Current.LocalFolder;
+            return folder.WriteTextToFileAsync(text, fileName, options);
+        }
+        else
+        {
+            var folder = StorageFolder.GetFolderFromPathAsync(System.AppContext.BaseDirectory).GetAwaiter().GetResult();
+            return folder.WriteTextToFileAsync(text, fileName, options);
+        }
     }
 
     /// <summary>
@@ -74,8 +83,16 @@ public static class StorageFileHelper
             throw new ArgumentNullException(nameof(fileName));
         }
 
-        var folder = ApplicationData.Current.LocalCacheFolder;
-        return folder.WriteTextToFileAsync(text, fileName, options);
+        if (App.IsPackaged)
+        {
+            var folder = ApplicationData.Current.LocalCacheFolder;
+            return folder.WriteTextToFileAsync(text, fileName, options);
+        }
+        else
+        {
+            var folder = StorageFolder.GetFolderFromPathAsync(System.AppContext.BaseDirectory).GetAwaiter().GetResult();
+            return folder.WriteTextToFileAsync(text, fileName, options);
+        }
     }
 
     /// <summary>
@@ -185,8 +202,16 @@ public static class StorageFileHelper
             throw new ArgumentNullException(nameof(fileName));
         }
 
-        var folder = ApplicationData.Current.LocalFolder;
-        return folder.WriteBytesToFileAsync(bytes, fileName, options);
+        if (App.IsPackaged)
+        {
+            var folder = ApplicationData.Current.LocalFolder;
+            return folder.WriteBytesToFileAsync(bytes, fileName, options);
+        }
+        else
+        {
+            var folder = StorageFolder.GetFolderFromPathAsync(System.AppContext.BaseDirectory).GetAwaiter().GetResult();
+            return folder.WriteBytesToFileAsync(bytes, fileName, options);
+        }
     }
 
     /// <summary>
@@ -217,8 +242,17 @@ public static class StorageFileHelper
             throw new ArgumentNullException(nameof(fileName));
         }
 
-        var folder = ApplicationData.Current.LocalCacheFolder;
-        return folder.WriteBytesToFileAsync(bytes, fileName, options);
+        if (App.IsPackaged)
+        {
+            var folder = ApplicationData.Current.LocalCacheFolder;
+            return folder.WriteBytesToFileAsync(bytes, fileName, options);
+        }
+        else
+        {
+            var folder = StorageFolder.GetFolderFromPathAsync(System.AppContext.BaseDirectory).GetAwaiter().GetResult();
+            return folder.WriteBytesToFileAsync(bytes, fileName, options);
+        }
+
     }
 
     /// <summary>
@@ -342,8 +376,16 @@ public static class StorageFileHelper
             throw new ArgumentNullException(nameof(fileName));
         }
 
-        var folder = ApplicationData.Current.LocalCacheFolder;
-        return folder.ReadTextFromFileAsync(fileName);
+        if (App.IsPackaged)
+        {
+            var folder = ApplicationData.Current.LocalCacheFolder;
+            return folder.ReadTextFromFileAsync(fileName);
+        }
+        else
+        {
+            var folder = StorageFolder.GetFolderFromPathAsync(System.AppContext.BaseDirectory).GetAwaiter().GetResult();
+            return folder.ReadTextFromFileAsync(fileName);
+        }
     }
 
     /// <summary>
@@ -365,8 +407,16 @@ public static class StorageFileHelper
             throw new ArgumentNullException(nameof(fileName));
         }
 
-        var folder = ApplicationData.Current.LocalFolder;
-        return folder.ReadTextFromFileAsync(fileName);
+        if (App.IsPackaged)
+        {
+            var folder = ApplicationData.Current.LocalFolder;
+            return folder.ReadTextFromFileAsync(fileName);
+        }
+        else
+        {
+            var folder = StorageFolder.GetFolderFromPathAsync(System.AppContext.BaseDirectory).GetAwaiter().GetResult();
+            return folder.ReadTextFromFileAsync(fileName);
+        }
     }
 
     /// <summary>
@@ -467,8 +517,16 @@ public static class StorageFileHelper
             throw new ArgumentNullException(nameof(fileName));
         }
 
-        var folder = ApplicationData.Current.LocalCacheFolder;
-        return folder.ReadBytesFromFileAsync(fileName);
+        if (App.IsPackaged)
+        {
+            var folder = ApplicationData.Current.LocalCacheFolder;
+            return folder.ReadBytesFromFileAsync(fileName);
+        }
+        else
+        {
+            var folder = StorageFolder.GetFolderFromPathAsync(System.AppContext.BaseDirectory).GetAwaiter().GetResult();
+            return folder.ReadBytesFromFileAsync(fileName);
+        }
     }
 
     /// <summary>
@@ -490,8 +548,16 @@ public static class StorageFileHelper
             throw new ArgumentNullException(nameof(fileName));
         }
 
-        var folder = ApplicationData.Current.LocalFolder;
-        return folder.ReadBytesFromFileAsync(fileName);
+        if (App.IsPackaged)
+        {
+            var folder = ApplicationData.Current.LocalFolder;
+            return folder.ReadBytesFromFileAsync(fileName);
+        }
+        else
+        {
+            var folder = StorageFolder.GetFolderFromPathAsync(System.AppContext.BaseDirectory).GetAwaiter().GetResult();
+            return folder.ReadBytesFromFileAsync(fileName);
+        }
     }
 
     /// <summary>

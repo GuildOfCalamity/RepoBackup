@@ -12,8 +12,9 @@
         x:Name="Root"
         HorizontalAlignment="Stretch"
         VerticalAlignment="Stretch"
-        Background="{ThemeResource BackgroundBrush}"
+        Background="Transparent"
         RowDefinitions="Auto,*">
+        <!--  Background="{ThemeResource BackgroundBrush}"  -->
 
         <!--  Custom TitleBar  -->
         <Grid
