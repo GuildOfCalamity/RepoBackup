@@ -785,7 +785,7 @@ public static class Extensions
 
         bool isBlocklisted = useBlockList &&
             (element is Panel || element is Button || element is Image || element is ScrollViewer || 
-             element is TextBlock || element is Border || element is Shape || element is ContentPresenter);
+             element is TextBlock || element is Border || element is Microsoft.UI.Xaml.Shapes.Shape || element is ContentPresenter);
 
         if (!isBlocklisted)
         {
@@ -1064,17 +1064,17 @@ public static class Extensions
     /// Returns a random selection from <see cref="Microsoft.UI.Colors"/>.
     /// </summary>
     /// <returns><see cref="Windows.UI.Color"/></returns>
-	public static Windows.UI.Color GetRandomMicrosoftUIColor()
-	{
-		try
-		{
-			var colorType = typeof(Microsoft.UI.Colors);
-			var colors = colorType.GetProperties()
-				.Where(p => p.PropertyType == typeof(Windows.UI.Color) && p.GetMethod.IsStatic && p.GetMethod.IsPublic)
-				.Select(p => (Windows.UI.Color)p.GetValue(null))
-				.ToList();
+    public static Windows.UI.Color GetRandomMicrosoftUIColor()
+    {
+        try
+        {
+            var colorType = typeof(Microsoft.UI.Colors);
+            var colors = colorType.GetProperties()
+                .Where(p => p.PropertyType == typeof(Windows.UI.Color) && p.GetMethod.IsStatic && p.GetMethod.IsPublic)
+                .Select(p => (Windows.UI.Color)p.GetValue(null))
+                .ToList();
 
-		    if (colors.Count > 0)
+            if (colors.Count > 0)
             {
                 var randomIndex = Random.Shared.Next(colors.Count);
                 var randomColor = colors[randomIndex];
@@ -1084,22 +1084,22 @@ public static class Extensions
             {
                 return Microsoft.UI.Colors.Gray;
             }
-	    }
-		catch (Exception ex)
-		{
-			Debug.WriteLine($"GetRandomColor: {ex.Message}");
-			return Microsoft.UI.Colors.Red;
-		}
-	}
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"GetRandomColor: {ex.Message}");
+            return Microsoft.UI.Colors.Red;
+        }
+    }
 
 
-	/// <summary>
-	/// Creates a Color from the hex color code and returns the result 
-	/// as a <see cref="Microsoft.UI.Xaml.Media.SolidColorBrush"/>.
-	/// </summary>
-	/// <param name="hexColorCode">text representation of the color</param>
-	/// <returns><see cref="Microsoft.UI.Xaml.Media.SolidColorBrush"/></returns>
-	public static Microsoft.UI.Xaml.Media.SolidColorBrush? GetBrushFromHexString(string hexColorCode)
+    /// <summary>
+    /// Creates a Color from the hex color code and returns the result 
+    /// as a <see cref="Microsoft.UI.Xaml.Media.SolidColorBrush"/>.
+    /// </summary>
+    /// <param name="hexColorCode">text representation of the color</param>
+    /// <returns><see cref="Microsoft.UI.Xaml.Media.SolidColorBrush"/></returns>
+    public static Microsoft.UI.Xaml.Media.SolidColorBrush? GetBrushFromHexString(string hexColorCode)
     {
         if (string.IsNullOrEmpty(hexColorCode))
             return null;
