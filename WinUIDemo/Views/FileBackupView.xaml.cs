@@ -1,5 +1,4 @@
 #nullable enable
-
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -7,10 +6,8 @@ using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
-using System.Net;
 using System.Reflection;
 using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
 using System.Threading;
@@ -21,35 +18,22 @@ using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
-using Microsoft.UI.Xaml.Data;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml.Hosting;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
-using Microsoft.UI.Xaml.Navigation;
-using Microsoft.UI.Xaml.Shapes;
 
 using Windows.Data.Xml.Dom;
-using Windows.Foundation;
-using Windows.Foundation.Collections;
 using Windows.Storage;
-using Windows.Storage.AccessCache;
-using Windows.Storage.Search;
 using Windows.System.Threading;
 using Windows.UI.Notifications;
-using Windows.UI.Popups;
 using Windows.UI.StartScreen;
-using Windows.UI.Text;
-using Windows.UI.ViewManagement;
 
 using Path = System.IO.Path;
 
 using WinUIDemo.Models;
 using WinUIDemo.Support;
 using WinUIDemo.Controls;
-using Windows.Graphics.Printing;
-using WinUIDemo.Printing;
-using Microsoft.UI.Xaml.Documents;
 
 namespace WinUIDemo.Views;
 
@@ -69,7 +53,7 @@ public sealed partial class FileBackupView : UserControl
     static Microsoft.UI.Composition.PointLight? _pointLight;
     static Microsoft.UI.Composition.PointLight? _pointLight2;
 
-	static bool _tipShown = false;
+    static bool _tipShown = false;
     static bool _evaluating = false;
     static bool _startupFinished = false;
     static string _lastError = "";
@@ -699,12 +683,12 @@ public sealed partial class FileBackupView : UserControl
     void AppOnWindowClosing(string obj)
     {
         if (_dwh != null)
-			_dwh.Dispose();
+            _dwh.Dispose();
         
         if (_debounceTimer != null && _debounceTimer.IsRunning)
             _debounceTimer.Stop();
 
-		_periodicTimer?.Cancel();
+        _periodicTimer?.Cancel();
         _cts?.Cancel();
         cpuRunning = false;
         AppSettings.SaveSettings();
@@ -851,9 +835,9 @@ public sealed partial class FileBackupView : UserControl
                 msg = $"Backup attempt interrupted due to cancellation. Process lasted {_elapsed.GetElapsedTime().ToReadableTime()}";
                 NotifyInfoBar(msg, InfoBarSeverity.Warning);
                 _logQueue.Enqueue(new LogEntry { Message = msg, Method = $"IndexProcess", Severity = LogLevel.Important, Time = DateTime.Now });
-				ToastImageAndText(msg);
-			}
-			else if (string.IsNullOrEmpty(_lastError))
+                ToastImageAndText(msg);
+            }
+            else if (string.IsNullOrEmpty(_lastError))
             {
                 msg = $"Backup attempt completed without issue. Process lasted {_elapsed.GetElapsedTime().ToReadableTime()}";
                 NotifyInfoBar(msg, InfoBarSeverity.Success);

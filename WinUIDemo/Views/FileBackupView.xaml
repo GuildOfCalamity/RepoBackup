@@ -529,12 +529,35 @@
                             x:Name="progBar"
                             Grid.Row="1"
                             Height="20"
-                            Foreground="{ThemeResource QuinaryBrush}"
+                            Margin="0,-24,0,0"
+                            CornerRadius="3"
                             Maximum="100"
                             Minimum="0"
                             ToolTipService.ToolTip="Current backup progress"
                             Visibility="{x:Bind IsBusy, Mode=OneWay, Converter={StaticResource BooleanVisibility}, ConverterParameter=False}"
-                            Value="0" />
+                            Value="0">
+                            <ProgressBar.Foreground>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                    <LinearGradientBrush.GradientStops>
+                                        <GradientStop Offset="0" Color="#FF507227" />
+                                        <GradientStop Offset="0.5" Color="#FF94d446" />
+                                        <GradientStop Offset="1" Color="#FF405B20" />
+                                    </LinearGradientBrush.GradientStops>
+                                </LinearGradientBrush>
+                            </ProgressBar.Foreground>
+                            <ProgressBar.Background>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                    <LinearGradientBrush.GradientStops>
+                                        <GradientStop Offset="0" Color="#7F202020" />
+                                        <GradientStop Offset="0.5" Color="#7F404040" />
+                                        <GradientStop Offset="1" Color="#7F151515" />
+                                    </LinearGradientBrush.GradientStops>
+                                </LinearGradientBrush>
+                            </ProgressBar.Background>
+                            <ProgressBar.RenderTransform>
+                                <ScaleTransform CenterX="0.5" CenterY="0.5" ScaleX="1" ScaleY="3" />
+                            </ProgressBar.RenderTransform>
+                        </ProgressBar>
                     </Grid>
                 </StackPanel>
 
@@ -894,7 +917,7 @@
                                             <FontIcon Glyph="&#xED25;" />
                                         </MenuFlyoutItem.Icon>
                                     </MenuFlyoutItem>
-                                    <!--  This has not been implemented yet.  -->
+                                    <!--#region [not implemented yet]-->
                                     <MenuFlyoutItem
                                         x:Name="mfiIgnore"
                                         Command="{x:Bind TestingCommand}"
@@ -904,7 +927,6 @@
                                             <FontIcon Glyph="&#xE7BA;" />
                                         </MenuFlyoutItem.Icon>
                                     </MenuFlyoutItem>
-                                    <!--  This has not been implemented yet.  -->
                                     <MenuFlyoutItem
                                         x:Name="mfiDisable"
                                         Command="{x:Bind TestingCommand}"
@@ -914,6 +936,7 @@
                                             <FontIcon Glyph="&#xEE79;" />
                                         </MenuFlyoutItem.Icon>
                                     </MenuFlyoutItem>
+                                    <!--#endregion-->
                                 </MenuFlyout>
                             </DropDownButton.Flyout>
                         </DropDownButton>
