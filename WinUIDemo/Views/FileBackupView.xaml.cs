@@ -213,8 +213,8 @@ public sealed partial class FileBackupView : UserControl
     public ICommand OpenAboutCommand { get; }
     public ICommand TestingCommand { get; }
 
-    ICommandHandler<KeyRoutedEventArgs> _keyboardHandler;
-    ICommandHandler<PointerRoutedEventArgs> _mouseHandler;
+    ICommandHandler<KeyRoutedEventArgs>? _keyboardHandler;
+    ICommandHandler<PointerRoutedEventArgs>? _mouseHandler;
     #endregion
 
     /// <summary>
@@ -2147,6 +2147,10 @@ public sealed partial class FileBackupView : UserControl
                                         {
                                             // Assemble file information for hashing.
                                             var name = Path.GetFileName(fi);
+                                            if (name.Contains("VS2022PreviewSettings.vssettings"))
+                                            {
+                                                Debug.WriteLine("[INFO] BREAK_POINT_HIT");
+                                            }
                                             var info = new FileInfo(fi);
                                             // The LastWriteTimeUtc may or may not be needed as some networked
                                             // locations can modify the write time based on when the files
@@ -2948,7 +2952,6 @@ public sealed partial class FileBackupView : UserControl
         {
             // Obtain the arguments from the notification
             Debug.WriteLine(toastActivationArgs.Arguments);
-
             if (App.WindowsVersion.Major >= 10 && App.WindowsVersion.Build >= 18362)
             {
                 // Obtain any user input (text boxes, menu selections) from the notification
@@ -2962,6 +2965,7 @@ public sealed partial class FileBackupView : UserControl
                     Debug.WriteLine($"ToastKey: '{key}'  ToastValue: '{value}'");
                 }
             }
+            App.ActivateMainWindow();
         }
     }
     void ToastOnDismissed(ToastNotification sender, ToastDismissedEventArgs args)

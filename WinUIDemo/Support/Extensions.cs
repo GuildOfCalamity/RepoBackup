@@ -227,6 +227,13 @@ public static class Extensions
     /// </summary>
     public static double Lerp(this double start, double end, double amount = 0.5D) => start + (end - start) * amount;
     public static float Lerp(this float start, float end, float amount = 0.5F) => start + (end - start) * amount;
+    
+    public static float LogLerp(this float start, float end, float percent, float logBase = 1.2F) => start + (end - start) * MathF.Log(percent, logBase);
+    public static double LogLerp(this double start, double end, double percent, double logBase = 1.2F) => start + (end - start) * Math.Log(percent, logBase);
+
+    public static int MapValue(this int val, int inMin, int inMax, int outMin, int outMax) => (val - inMin) * (outMax - outMin) / (inMax - inMin) + outMin;
+    public static float MapValue(this float val, float inMin, float inMax, float outMin, float outMax) => (val - inMin) * (outMax - outMin) / (inMax - inMin) + outMin;
+    public static double MapValue(this double val, double inMin, double inMax, double outMin, double outMax) => (val - inMin) * (outMax - outMin) / (inMax - inMin) + outMin;
 
 
     /// <summary>
@@ -3045,7 +3052,20 @@ public static class Extensions
         if (inputArray.Length > 1)
             return inputArray.Skip(1).ToArray();
         else
-            return new string[0];
+            return inputArray;
+    }
+
+    /// <summary>
+    /// Helper for parsing command line arguments.
+    /// </summary>
+    /// <param name="inputArray"></param>
+    /// <returns>string array of args excluding the 1st arg</returns>
+    public static string[] IgnoreNthTakeRest(this string[] inputArray, int skip = 1)
+    {
+        if (inputArray.Length > skip)
+            return inputArray.Skip(skip).ToArray();
+        else
+            return inputArray;
     }
 
     /// <summary>
@@ -4106,7 +4126,7 @@ public static class Extensions
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"GatherReferencedAssemblies: {ex.Message}", nameof(Extensions));
+            Debug.WriteLine($"GatherLoadedModules: {ex.Message}");
         }
         return modules.ToString();
     }
@@ -5244,26 +5264,27 @@ public static class Extensions
         return wb;
     }
 
-    static Guid GetEncoderId(string fileName)
+    /// <summary>
+    /// Returns an encoder <see cref="Guid"/> based on the <paramref name="fileName"/> extension.
+    /// </summary>
+    public static Guid GetEncoderId(string fileName)
     {
-        Guid encoderId;
-
         var ext = Path.GetExtension(fileName);
 
         if (new[] { ".bmp", ".dib" }.Contains(ext))
-            encoderId = BitmapEncoder.BmpEncoderId;
+            return Windows.Graphics.Imaging.BitmapEncoder.BmpEncoderId;
         else if (new[] { ".tiff", ".tif" }.Contains(ext))
-            encoderId = BitmapEncoder.TiffEncoderId;
+            return Windows.Graphics.Imaging.BitmapEncoder.TiffEncoderId;
         else if (new[] { ".gif" }.Contains(ext))
-            encoderId = BitmapEncoder.GifEncoderId;
+            return Windows.Graphics.Imaging.BitmapEncoder.GifEncoderId;
         else if (new[] { ".jpg", ".jpeg", ".jpe", ".jfif", ".jif" }.Contains(ext))
-            encoderId = BitmapEncoder.JpegEncoderId;
+            return Windows.Graphics.Imaging.BitmapEncoder.JpegEncoderId;
         else if (new[] { ".hdp", ".jxr", ".wdp" }.Contains(ext))
-            encoderId = BitmapEncoder.JpegXREncoderId;
-        else //if (new [] {".png"}.Contains(ext))
-            encoderId = BitmapEncoder.PngEncoderId;
-
-        return encoderId;
+            return Windows.Graphics.Imaging.BitmapEncoder.JpegXREncoderId;
+        else if (new[] { ".heic", ".heif", ".heifs" }.Contains(ext))
+            return Windows.Graphics.Imaging.BitmapEncoder.HeifEncoderId;
+        else // default will be PNG
+            return Windows.Graphics.Imaging.BitmapEncoder.PngEncoderId;
     }
     #endregion
 

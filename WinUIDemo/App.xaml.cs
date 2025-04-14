@@ -37,6 +37,7 @@ using Windows.UI.ViewManagement;
 
 using WinUIDemo.ViewModels;
 using Windows.UI.Popups;
+using System.Runtime.InteropServices;
 
 namespace WinUIDemo;
 
@@ -385,36 +386,36 @@ public partial class App : Application
         }
     }
 
-	/// <summary>
-	/// The <see cref="DisplayArea"/> exposes properties such as:
-	/// OuterBounds     (Rect32)
-	/// WorkArea.Width  (int)
-	/// WorkArea.Height (int)
-	/// IsPrimary       (bool)
-	/// DisplayId.Value (ulong)
-	/// </summary>
-	/// <param name="window"></param>
-	/// <returns><see cref="DisplayArea"/></returns>
-	DisplayArea? GetDisplayArea(Window window)
-	{
-		System.IntPtr hWnd = WinRT.Interop.WindowNative.GetWindowHandle(window);
-		Microsoft.UI.WindowId windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hWnd);
-		var da = Microsoft.UI.Windowing.DisplayArea.GetFromWindowId(windowId, DisplayAreaFallback.Nearest);
-		return da;
-	}
+    /// <summary>
+    /// The <see cref="DisplayArea"/> exposes properties such as:
+    /// OuterBounds     (Rect32)
+    /// WorkArea.Width  (int)
+    /// WorkArea.Height (int)
+    /// IsPrimary       (bool)
+    /// DisplayId.Value (ulong)
+    /// </summary>
+    /// <param name="window"></param>
+    /// <returns><see cref="DisplayArea"/></returns>
+    DisplayArea? GetDisplayArea(Window window)
+    {
+        System.IntPtr hWnd = WinRT.Interop.WindowNative.GetWindowHandle(window);
+        Microsoft.UI.WindowId windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hWnd);
+        var da = Microsoft.UI.Windowing.DisplayArea.GetFromWindowId(windowId, DisplayAreaFallback.Nearest);
+        return da;
+    }
 
-	/// <summary>
-	/// Test method for side-loading of library objects using the <see cref="Assembly.GetExportedTypes()"/>.
-	/// Most base types, such as <see cref="ZoomMode"/>, will expose an 
+    /// <summary>
+    /// Test method for side-loading of library objects using the <see cref="Assembly.GetExportedTypes()"/>.
+    /// Most base types, such as <see cref="ZoomMode"/>, will expose an 
     /// <see cref="IComparable"/>, <see cref="IConvertible"/> and <see cref="IFormattable"/>.
-	/// </summary>
-	/// <remarks>
-	/// In this example we will look into "Microsoft.WinUI.dll" for all types that support 
+    /// </summary>
+    /// <remarks>
+    /// In this example we will look into "Microsoft.WinUI.dll" for all types that support 
     /// <see cref="Microsoft.UI.Composition.IAnimationObject"/> and are not generics. We will 
     /// then use the <see cref="Assembly.CreateInstance"/> to add them to the evaluator dictionary.
-	/// </remarks>
-	/// <param name="dllPath"></param>
-	public static Dictionary<string, Microsoft.UI.Composition.IAnimationObject> GetExportedInterfaces(string dllPath = "")
+    /// </remarks>
+    /// <param name="dllPath"></param>
+    public static Dictionary<string, Microsoft.UI.Composition.IAnimationObject> GetExportedInterfaces(string dllPath = "")
     {
         Dictionary<string, Microsoft.UI.Composition.IAnimationObject> evaluators = new();
         
@@ -1129,5 +1130,81 @@ public partial class App : Application
                 break;
         }
     }
+    #endregion
+
+    /// <summary>
+    /// If <see cref="App.WindowHandle"/> is set then a call to User32 <see cref="SetForegroundWindow(nint)"/> 
+    /// will be invoked. I tried using the native OverlappedPresenter.Restore(true), but that does not work.
+    /// </summary>
+    public static void ActivateMainWindow()
+    {
+        if (App.WindowHandle != IntPtr.Zero)
+            _ = SetForegroundWindow(App.WindowHandle);
+
+        //if (AppWin is not null && AppWin.Presenter is not null && AppWin.Presenter is OverlappedPresenter op)
+        //    op.Restore(true);
+    }
+
+    /// <summary>
+    /// To my knowledge there is no way to get this natively via the WinUI3 SDK, so I'm adding a P/Invoke.
+    /// </summary>
+    /// <returns>the amount of displays the system recognizes</returns>
+    public static int GetMonitorCount()
+    {
+        int count = 0;
+
+        MonitorEnumProc callback = (IntPtr hDesktop, IntPtr hdc, ref ScreenRect prect, int d) => ++count > 0;
+
+        if (EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, callback, 0))
+        {
+            Debug.WriteLine($"[INFO] You have {count} {(count > 1 ? "monitors" : "monitor")}.");
+            return count;
+        }
+        else
+        {
+            Debug.WriteLine("[WARNING] An error occurred while enumerating monitors.");
+            return 1;
+        }
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    struct ScreenRect
+    {
+        public int left;
+        public int top;
+        public int right;
+        public int bottom;
+    }
+    delegate bool MonitorEnumProc(IntPtr hDesktop, IntPtr hdc, ref ScreenRect pRect, int dwData);
+
+    #region [User32 Imports]
+#pragma warning disable CS0414
+    static int SW_HIDE = 0;
+    static int SW_SHOWNORMAL = 1;
+    static int SW_SHOWMINIMIZED = 2;
+    static int SW_SHOWMAXIMIZED = 3;
+    static int SW_SHOWNOACTIVATE = 4;
+    static int SW_SHOW = 5;
+    static int SW_MINIMIZE = 6;
+    static int SW_SHOWMINNOACTIVE = 7;
+    static int SW_SHOWNA = 8;
+    static int SW_RESTORE = 9;
+    static int SW_SHOWDEFAULT = 10;
+    static int SW_FORCEMINIMIZE = 11;
+#pragma warning restore CS0414
+    [DllImport("User32.dll")]
+    internal static extern bool ShowWindow(IntPtr handle, int nCmdShow);
+
+    [DllImport("user32.dll")]
+    internal static extern IntPtr SetForegroundWindow(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    internal static extern bool IsWindowVisible(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    internal static extern IntPtr GetActiveWindow();
+
+    [DllImport("user32.dll")]
+    static extern bool EnumDisplayMonitors(IntPtr hdc, IntPtr lpRect, MonitorEnumProc callback, int dwData);
     #endregion
 }

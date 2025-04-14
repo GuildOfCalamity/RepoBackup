@@ -6,7 +6,6 @@ using Windows.ApplicationModel;
 using Windows.Storage;
 using Windows.Storage.Search;
 using Windows.Storage.Streams;
-using static System.Net.Mime.MediaTypeNames;
 
 namespace WinUIDemo;
 

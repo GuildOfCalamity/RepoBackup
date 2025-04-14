@@ -4,6 +4,6 @@
     <DebuggerFlavor>ProjectDebugger</DebuggerFlavor>
   </PropertyGroup>
   <PropertyGroup>
-    <ActiveDebugProfile>WinUIDemo (Unpackaged)</ActiveDebugProfile>
+    <ActiveDebugProfile>RepoBackup (Unpackaged)</ActiveDebugProfile>
   </PropertyGroup>
 </Project>

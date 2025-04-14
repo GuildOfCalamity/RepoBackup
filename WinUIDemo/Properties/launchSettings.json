@@ -1,9 +1,9 @@
 {
   "profiles": {
-    "WinUIDemo (Package)": {
+    "RepoBackup (Package)": {
       "commandName": "MsixPackage"
     },
-    "WinUIDemo (Unpackaged)": {
+    "RepoBackup (Unpackaged)": {
       "commandName": "Project",
       "commandLineArgs": "-mode normal"
     }
