@@ -1,66 +1,66 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net6.0-windows10.0.19041.0</TargetFramework>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
     <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
     <RootNamespace>WinUIDemo</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <Platforms>x86;x64;ARM64</Platforms>
-    <RuntimeIdentifiers>win10-x86;win10-x64;win10-arm64</RuntimeIdentifiers>
-    <PublishProfile>win10-$(Platform).pubxml</PublishProfile>
+    <RuntimeIdentifiers>win-x86;win-x64;win-arm64</RuntimeIdentifiers>
+    <PublishProfile>win-$(Platform).pubxml</PublishProfile>
     <UseWinUI>true</UseWinUI>
     <EnableMsixTooling>true</EnableMsixTooling>
     <!-- 
-        WindowsPackageType defines whether your app is packaged (MSIX) or unpackaged (None) 
+      WindowsPackageType defines whether your app is packaged (MSIX) or unpackaged (None) 
     -->
     <WindowsPackageType>None</WindowsPackageType>
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
     <ApplicationIcon>Assets\RepoFolder.ico</ApplicationIcon>
     
     <!--
-        ** Extras (https://learn.microsoft.com/en-us/dotnet/core/project-sdk/msbuild-props) **
+      ** Extras (https://learn.microsoft.com/en-us/dotnet/core/project-sdk/msbuild-props) **
     -->
     
     <!--
-        The RollForward property controls how the application chooses a runtime when multiple runtime versions 
-        are available. This value is output to the RepoBackup.runtimeconfig.json as the "rollForward" setting.
+      The RollForward property controls how the application chooses a runtime when multiple runtime versions 
+      are available. This value is output to the RepoBackup.runtimeconfig.json as the "rollForward" setting.
     -->
     <RollForward>LatestMinor</RollForward>
     
     <!-- 
-        CopyLocalLockFileAssemblies is useful for plugin projects that have dependencies on other libraries.
-        If you set this property to true, any NuGet package dependencies are copied to the output directory.
+      CopyLocalLockFileAssemblies is useful for plugin projects that have dependencies on other libraries.
+      If you set this property to true, any NuGet package dependencies are copied to the output directory.
     -->
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
     
     <!-- 
-        To speed up the build time, builds that are implicitly triggered by Visual Studio skip code analysis, 
-        including nullable analysis. Visual Studio triggers an implicit build when you run tests, for example. 
-        However, implicit builds are optimized only when TreatWarningsAsErrors is not true.
+      To speed up the build time, builds that are implicitly triggered by Visual Studio skip code analysis, 
+      including nullable analysis. Visual Studio triggers an implicit build when you run tests, for example. 
+      However, implicit builds are optimized only when TreatWarningsAsErrors is not true.
     -->
-    <OptimizeImplicitlyTriggeredBuild>True</OptimizeImplicitlyTriggeredBuild>
+    <OptimizeImplicitlyTriggeredBuild>false</OptimizeImplicitlyTriggeredBuild>
     
     <!--
       Generates an XML documentation file at compile time, e.g. "(outdir)\RepoBackup.xml"
       This will also check the formatting of your summary blocks and put the notes inside the documentation file.
     -->
-    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
     
     <!-- 
-      These next two get rid of all the unecessary pathing that MS adds and 
+      These next two get rid of all the unnecessary pathing that MS adds and 
       makes the output match the traditional .NET Framework builds.
     -->
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
     
     <!-- 
-        Whether the SDK generates error NETSDK1148 when MSBuild detects duplicate 
-        files in the publish output, but can't determine which files to remove.
+      Whether the SDK generates error NETSDK1148 when MSBuild detects duplicate 
+      files in the publish output, but can't determine which files to remove.
     -->
     <ErrorOnDuplicatePublishOutputFiles>false</ErrorOnDuplicatePublishOutputFiles>
     
     <!-- 
-    ** We'll set the props in the AssemblyInfo file, since we've stated that we want to generate an assembly info file. **
+        We'll set the props in the AssemblyInfo file, since we've stated that we want to generate an assembly info file.
     <Company>The Guild</Company>
     <Authors>User Name</Authors>
     <Product>RepoBackup</Product>
@@ -78,11 +78,12 @@
   </PropertyGroup>
 
     <!-- 
-	   Define "IS_UNPACKAGED" constant if the app is an unpackaged app. 
+       Define "IS_UNPACKAGED" constant if the app is an unpackaged app. 
     -->
   <PropertyGroup Condition="'$(WindowsPackageType)' == 'None'">
       <DefineConstants>IS_UNPACKAGED</DefineConstants>
   </PropertyGroup>
+    
   <ItemGroup>
     <None Remove="Assets\AppIcon.ico" />
     <None Remove="Assets\AppIcon.png" />
@@ -114,7 +115,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.7.250401001" />
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.6.250402001" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.1742" />
     <Manifest Include="$(ApplicationManifest)" />
   </ItemGroup>
@@ -202,8 +203,32 @@
       <ItemGroup>
           <RemovingFiles Include="$(OutDir)*\*.mui" Exclude="$(OutDir)en-us\*.mui" />
           <RemovingFolders Include="@(RemovingFiles->'%(RootDir)%(Directory)')" />
+          <RemovingCS Include="$(OutDir)cs" />
+          <RemovingDE Include="$(OutDir)de" />
+          <RemovingES Include="$(OutDir)es" />
+          <RemovingFR Include="$(OutDir)fr" />
+          <RemovingIT Include="$(OutDir)it" />
+          <RemovingJA Include="$(OutDir)ja" />
+          <RemovingKO Include="$(OutDir)ko" />
+          <RemovingPL Include="$(OutDir)pl" />
+          <RemovingRU Include="$(OutDir)ru" />
+          <RemovingTR Include="$(OutDir)tr" />
+          <RemovingZHS Include="$(OutDir)zh-Hans" />
+          <RemovingZHT Include="$(OutDir)zh-Hant" />
       </ItemGroup>
       <RemoveDir Directories="@(RemovingFolders)" />
+      <RemoveDir Directories="@(RemovingCS)" />
+      <RemoveDir Directories="@(RemovingDE)" />
+      <RemoveDir Directories="@(RemovingES)" />
+      <RemoveDir Directories="@(RemovingFR)" />
+      <RemoveDir Directories="@(RemovingIT)" />
+      <RemoveDir Directories="@(RemovingJA)" />
+      <RemoveDir Directories="@(RemovingKO)" />
+      <RemoveDir Directories="@(RemovingPL)" />
+      <RemoveDir Directories="@(RemovingRU)" />
+      <RemoveDir Directories="@(RemovingTR)" />
+      <RemoveDir Directories="@(RemovingZHS)" />
+      <RemoveDir Directories="@(RemovingZHT)" />
   </Target>
     
 </Project>

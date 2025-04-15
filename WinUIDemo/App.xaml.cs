@@ -153,12 +153,19 @@ public partial class App : Application
     {
         Debug.WriteLine($"{MethodBase.GetCurrentMethod()?.DeclaringType?.Name}__{MethodBase.GetCurrentMethod()?.Name}");
 
+        App.Current.DebugSettings.FailFastOnErrors = false;
+
         AppDomain.CurrentDomain.UnhandledException += CurrentDomainUnhandledException;
         AppDomain.CurrentDomain.FirstChanceException += CurrentDomainFirstChanceException;
         AppDomain.CurrentDomain.ProcessExit += CurrentDomainOnProcessExit;
-        AppDomain.CurrentDomain.AssemblyLoad += CurrentDomainOnAssemblyLoad;
-        AppDomain.CurrentDomain.AssemblyResolve += CurrentDomainOnAssemblyResolve;
+        //AppDomain.CurrentDomain.AssemblyLoad += CurrentDomainOnAssemblyLoad;
+        //AppDomain.CurrentDomain.AssemblyResolve += CurrentDomainOnAssemblyResolve;
         TaskScheduler.UnobservedTaskException += OnUnobservedTaskException;
+        if (Debugger.IsAttached)
+        {
+            DebugSettings.BindingFailed += DebugOnBindingFailed;
+            DebugSettings.XamlResourceReferenceFailed += DebugOnXamlResourceReferenceFailed;
+        }
         AppBase = AppDomain.CurrentDomain.SetupInformation.ApplicationBase;
         AppName = Assembly.GetExecutingAssembly().GetName().Name;
 
@@ -237,7 +244,7 @@ public partial class App : Application
             // Call secondary constructor.
             m_window = new MainWindow(ArgDictionary);
         }
-        else if (argsAlt.Length > 0)
+        else if (argsAlt.Length > 1)
         {
             var array = argsAlt.IgnoreFirstTakeRest();
             for (int i = 0; i < array.Length; i += 2)
@@ -885,6 +892,17 @@ public partial class App : Application
 
         e.SetObserved(); // suppress and handle manually
     }
+
+    void DebugOnXamlResourceReferenceFailed(DebugSettings sender, XamlResourceReferenceFailedEventArgs args)
+    {
+        Debug.WriteLine($"[WARNING] XamlResourceReferenceFailed: {args.Message}");
+    }
+
+    void DebugOnBindingFailed(object sender, BindingFailedEventArgs args)
+    {
+        Debug.WriteLine($"[WARNING] BindingFailed: {args.Message}");
+    }
+
 
     /// <summary>
     /// How to load custom libraries based on some environment factor.

@@ -46,7 +46,6 @@ public sealed partial class MainWindow : Window
     /// </summary>
     public MainWindow()
     {
-        Title = App.GetCurrentAssemblyName()?.Split(',')[0];
         this.InitializeComponent();
 
         // These must come after InitializeComponent() if using a NavigationView. 
@@ -54,6 +53,8 @@ public sealed partial class MainWindow : Window
         this.SetTitleBar(CustomTitleBar);
         Logger = App.GetService<FileLogger>();
         AppSettings = App.GetService<SettingsManager>() ?? new SettingsManager();
+        var temp = App.GetCurrentAssemblyName();
+        Title = temp?.Split(',')[0];
 
         // Sample some of the Windows.UI.ViewManagement.UISettings:
         Debug.WriteLine($"{nameof(App.TextScaleFactor)} => {App.TextScaleFactor}");
