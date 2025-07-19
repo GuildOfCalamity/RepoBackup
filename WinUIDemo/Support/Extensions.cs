@@ -124,6 +124,7 @@ public static class Extensions
         builder.AddString(nameof(s.HomeBufferFolder), s.HomeBufferFolder);
         builder.AddString(nameof(s.WorkRepoFolder), s.WorkRepoFolder);
         builder.AddString(nameof(s.WorkBufferFolder), s.WorkBufferFolder);
+        builder.AddString(nameof(s.ExcludeList), s.ExcludeList);
         builder.AddBoolean(nameof(s.ExplorerShell), s.ExplorerShell);
         builder.AddBoolean(nameof(s.FullInitialBackup), s.FullInitialBackup);
         builder.AddBoolean(nameof(s.AtWork), s.AtWork);

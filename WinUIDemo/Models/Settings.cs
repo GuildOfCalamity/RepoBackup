@@ -9,6 +9,7 @@ public class Settings
     public string HomeBufferFolder { get; set; }
     public string WorkRepoFolder { get; set; }
     public string WorkBufferFolder { get; set; }
+    public string ExcludeList { get; set; } = @"\.git,\.vs,\bin,\obj";
     public bool ExplorerShell { get; set; }
     public bool FullInitialBackup { get; set; }
     public bool AtWork { get; set; }

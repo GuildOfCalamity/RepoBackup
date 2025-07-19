@@ -130,6 +130,7 @@ public class SettingsManager : ISettingsManager
             HomeBufferFolder = @"F:\RepoBackups",
             WorkRepoFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), @"source\repos"),
             WorkBufferFolder = @"D:\RepoBackups",
+            ExcludeList = @"\.git,\.vs,\bin,\obj",
         };
     }
 }

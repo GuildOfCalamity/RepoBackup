@@ -78,7 +78,7 @@ public sealed partial class TabHeader : UserControl
     /// </summary>
     void TabHeaderOnLoaded(object sender, RoutedEventArgs e)
     {
-        _hoverBrush = Extensions.GetResource<SolidColorBrush>("QuaternaryBrush");
+        _hoverBrush = Extensions.GetResource<SolidColorBrush>("QuaternaryBrush") ?? new SolidColorBrush(Windows.UI.Color.FromArgb(255, 30, 30, 90));
     }
 
     /// <summary>

@@ -219,7 +219,7 @@
                                     </Button>
                                     <TextBox
                                         x:Name="tbBuffer"
-                                        Margin="1,14"
+                                        Margin="1,6"
                                         IsEnabled="{x:Bind IsBusy, Mode=OneWay, Converter={StaticResource BooleanInverter}}"
                                         ToolTipService.ToolTip="Temporary holding area for identified file changes">
                                         <TextBox.Header>
@@ -229,6 +229,20 @@
                                                 FontWeight="Medium"
                                                 Foreground="{ThemeResource HeaderBrush}"
                                                 Text="Buffering folder" />
+                                        </TextBox.Header>
+                                    </TextBox>
+                                    <TextBox
+                                        x:Name="tbExclude"
+                                        Margin="1,6,1,14"
+                                        IsEnabled="{x:Bind IsBusy, Mode=OneWay, Converter={StaticResource BooleanInverter}}"
+                                        ToolTipService.ToolTip="Comma separated list for path fragments to exclude">
+                                        <TextBox.Header>
+                                            <TextBlock
+                                                Margin="0"
+                                                Padding="0"
+                                                FontWeight="Medium"
+                                                Foreground="{ThemeResource HeaderBrush}"
+                                                Text="Exclusions" />
                                         </TextBox.Header>
                                     </TextBox>
 

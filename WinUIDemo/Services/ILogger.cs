@@ -315,7 +315,7 @@ namespace WinUIDemo
         #endregion
 
         #region [Path helpers]
-        public string GetCurrentLogPath() => $@"{mLogRoot}\{mAppName}\{DateTime.Today.Year}\{DateTime.Today.Month.ToString("00")}-{DateTime.Today.ToString("MMMM")}\{mAppName}_{DateTime.Now.ToString("dd")}.log";
+        public string GetCurrentLogPath() => Path.Combine(mLogRoot, $@"{mAppName}\{DateTime.Today.Year}\{DateTime.Today.Month.ToString("00")}-{DateTime.Today.ToString("MMMM")}\{mAppName}_{DateTime.Now.ToString("dd")}.log");
 
         /// <summary>
         /// Gets usable drive from <see cref="DriveType.Fixed"/> volumes.

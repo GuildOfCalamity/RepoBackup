@@ -408,6 +408,7 @@ public sealed partial class FileBackupView : UserControl
         cbRandomBackdrop.IsChecked = AppSettings.Config.RandomBackdrop;
         ThreadComboBox.SelectedIndex = AppSettings.Config.ThreadIndex;
         SpoiledComboBox.SelectedIndex = AppSettings.Config.StaleIndex;
+        tbExclude.Text = AppSettings.Config.ExcludeList;
         if (AppSettings.Config.AtWork)
             tbBuffer.Text = AppSettings.Config.WorkBufferFolder;
         else
@@ -911,6 +912,8 @@ public sealed partial class FileBackupView : UserControl
                 AppSettings.Config.WorkBufferFolder = tbBuffer.Text;
             else if (cbWorkLocation.IsChecked.HasValue && !cbWorkLocation.IsChecked.Value && !string.IsNullOrEmpty(tbBuffer.Text))
                 AppSettings.Config.HomeBufferFolder = tbBuffer.Text;
+
+            AppSettings.Config.ExcludeList = tbExclude.Text;
 
             if (App.AnimationsEffectsEnabled)
                 StoryboardPath.Stop();
@@ -1602,6 +1605,7 @@ public sealed partial class FileBackupView : UserControl
             HomeBufferFolder = @"F:\RepoBackups",
             WorkRepoFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), @"source\repos"),
             WorkBufferFolder = @"D:\RepoBackups",
+            ExcludeList = @"\.git,\.vs,\bin,\obj",
         };
     }
     */
@@ -2245,12 +2249,12 @@ public sealed partial class FileBackupView : UserControl
             {
                 var semaphore = new SemaphoreSlim(maxThreads, maxThreads);
 
-                // This ignore list could be moved to the config for customizing.
+                // This ignore list was moved to the config for customizing.
                 List<string> ignores = new();
-                //ignores.Add(@"\.git");
-                ignores.Add(@"\.vs");
-                ignores.Add(@"\bin");
-                ignores.Add(@"\obj");
+                AppSettings.Config.ExcludeList?.Split(',')
+                    .Select(i => i.Trim())
+                    .Where(i => !string.IsNullOrEmpty(i))
+                    .ToList().ForEach(i => ignores.Add(i));
 
                 // If multi-threaded config, handle root folder first.
                 IndexFiles(folderPath, ref results, token, true);
