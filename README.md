@@ -14,7 +14,11 @@
 * One thing I've never seen on *Github* is any `csproj` that breaks down what the directive tags do, so if you open the `csproj` file you will find an extensive collection of what each tag does. I have setup the defaults to be the best configuration for an existing user who is coming from an older *VisualStudio* platform.
 * Most of this code is my own doing, but you will find some code borrowed from other *Microsoft* repos, such as the `VisualTreeHelperExtensions`. When using other code snippets I have included links to their origin, or if it's a workaround you will find a the link to the relevant *Github* issue. If you have any questions or concerns, feel free to reach out to me in the issue/discussion threads.
 
-## 📝 v1.0.0.12 - July 2023
+## 📝 v1.0.0.2 - July 2025
+* Added exclusion list support.
+	- Can be found in **SplitView** settings panel.
+
+## 📝 v1.0.0.1 - July 2023
 * Added acrylic desktop support.
 
 ## 🧾 License/Warranty
